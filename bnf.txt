@@ -1,0 +1,41 @@
+
+
+ModuleDefinition ::= Name "DEFINITIONS ::= BEGIN" ModuleBody "END"
+ModuleBody       ::= AssignmentList | Empty
+AssignmentList   ::= Assignment | AssignmentList Assignment
+Assignment       ::= Name "::=" Type
+Type             ::= ExternalType | BuiltinType | DefinedType
+ExternalType     ::= Name "." Name
+BuiltinType      ::= PrimitiveType | ContructedType | TaggedType
+DefinedType      ::= Name
+PrimitiveType    ::= Integer | Boolean | BitStr | OctetStr | Any | Null | ObjId
+ConstructedType  ::= Sequence | SequenceOf | Set | SetOf | Choice
+TaggedType       ::= Tag Type | Tag "IMPLICIT" Type
+Integer          ::= "INTEGER" | "INTEGER" "{" NamedNumberList "}"
+Boolean          ::= "BOOLEAN"
+BitStr           ::= "BIT STRING" | "BIT STRING" "{" NamedBitList "}"
+OctetStr         ::= "OCTET STRING"
+Any              ::= "ANY"
+Null             ::= "NULL"
+ObjId            ::= OBJECT IDENTIFIER
+Sequence         ::= "SEQUENCE" "{" ElementTypeList "}" | "SEQUENCE {}"
+SequenceOf       ::= "SEQUENCE OF" Type | "SEQUENCE"
+Set              ::= "SET" "{" ElementTypeList "}" | "SET {}"
+SetOf            ::= "SET OF" Type | "SET"
+Choice           ::= "CHOICE" "{" AlternativeTypeList "}"
+Tag              ::= "[" Class UnsignedNumber "]"
+Class            ::= "UNIVERSAL" | "APPLICATION" | "PRIVATE" | Empty
+NamedNumberList  ::= NamedNumber | NamedNumberList "," NamedNumber
+NamedNumber      ::= Name "(" UnsignedNumber ")" | 
+                     Name "(" "-" UnsignedNumber ")"
+NamedBitList     ::= NamedBit | NamedBitList "," NamedBit
+NamedBit         ::= Name "(" UnsignedNumber ")"
+ElementTypeList  ::= ElementType | ElementTypeList "," ElementType
+ElementType      ::= NamedType | NamedType "OPTIONAL" | 
+                     NamedType "DEFAULT" Value
+NamedType        ::= Name Type | Type
+AlternativeTypeList
+                 ::= NamedType | AlternativeTypeList "," NamedType
+UnsignedNumber   ::= Digit | UnsignedNumber Digit
+Digit            ::= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+Empty            ::= 

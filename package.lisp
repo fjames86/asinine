@@ -1,0 +1,5 @@
+
+
+(defpackage #:asinine 
+  (:use #:cl))
+
