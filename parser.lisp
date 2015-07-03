@@ -69,11 +69,21 @@
 	       size max))
 
   (module-definition 
-   (name definitions |::=| begin module-body end (lambda (a b c d e f) (declare (ignore b c d f))
-							 `(:module ,a ,e)))
-   (name definitions explicit tags |::=| begin module-body end 
-	 (lambda (a b c d e f g h) (declare (ignore b c d e f h))
-		 `(:module ,a ,g :explicit-tags))))
+   (name maybe-oid-list definitions |::=| begin module-body end 
+	 (lambda (a b c d e f g) (declare (ignore c d e g))
+		 `(:module ,a ,f :oid ,b)))
+   (name maybe-oid-list definitions explicit tags |::=| begin module-body end 
+	 (lambda (a b c d e f g h i) (declare (ignore c d e f g i))
+		 `(:module ,a ,h :oid ,b :explicit-tags t)))
+   (name maybe-oid-list definitions implicit tags |::=| begin module-body end 
+	 (lambda (a b c d e f g h i) (declare (ignore c d e f g i))
+		 `(:module ,a ,h :oid ,b :explicit-tags nil))))
+
+
+  (maybe-oid-list 
+   (|{| object-identifier-list |}| 
+	(lambda (a b c) (declare (ignore a c)) b))
+   empty)
 
   (module-body 
    assignment-list 
@@ -210,11 +220,11 @@
 
   (element-type 
    named-type 
-   (named-type optional (lambda (a b) (declare (ignore b)) `(:optional ,a)))
-   (named-type default value (lambda (a b c) (declare (ignore b)) `(:default ,a ,c)))
+   (named-type optional (lambda (a b) (declare (ignore b)) (append a `(:optional t))))
+   (named-type default value (lambda (a b c) (declare (ignore b)) (append a `(:default ,c))))
    (named-type defined by name
 	       (lambda (a b c d) (declare (ignore b c))
-		       `(:defined-by ,a ,d))))
+		       (append a `(:defined-by ,d)))))
 
   (named-type
    (name type)

@@ -1,10 +1,10 @@
 
 
 KerberosV5Spec2 
---{
---        iso(1) identified-organization(3) dod(6) internet(1)
---        security(5) kerberosV5(2) modules(4) krb5spec2(2)
---} 
+{
+        iso(1) identified-organization(3) dod(6) internet(1)
+        security(5) kerberosV5(2) modules(4) krb5spec2(2)
+} 
 DEFINITIONS EXPLICIT TAGS ::= BEGIN
 
 -- OID arc for KerberosV5
