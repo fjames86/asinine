@@ -74,11 +74,10 @@
 		 `(:module ,a ,f :oid ,b)))
    (name maybe-oid-list definitions explicit tags |::=| begin module-body end 
 	 (lambda (a b c d e f g h i) (declare (ignore c d e f g i))
-		 `(:module ,a ,h :oid ,b :explicit-tags t)))
+		 `(:module ,a ,h :oid ,b :explicit t)))
    (name maybe-oid-list definitions implicit tags |::=| begin module-body end 
 	 (lambda (a b c d e f g h i) (declare (ignore c d e f g i))
-		 `(:module ,a ,h :oid ,b :explicit-tags nil))))
-
+		 `(:module ,a ,h :oid ,b :implicit t))))
 
   (maybe-oid-list 
    (|{| object-identifier-list |}| 
@@ -134,7 +133,7 @@
 
   (tagged-type
    (tag type (lambda (a b) `(:tagged-type ,a ,b)))
-   (tag implicit type (lambda (a b c) (declare (ignore b)) `(:tagged-type ,a ,c :explicit nil)))
+   (tag implicit type (lambda (a b c) (declare (ignore b)) `(:tagged-type ,a ,c :implicit t)))
    (tag explicit type (lambda (a b c) (declare (ignore b)) `(:tagged-type ,a ,c :explicit t))))
 
   (integer-expr
