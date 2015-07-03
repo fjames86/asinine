@@ -113,8 +113,8 @@
    tagged-type)
 
   (defined-type
-    name
-    (name |(| name |)| (lambda (a b c d) (declare (ignore b d)) `(,a ,c))))
+    (name (lambda (a) `(:defined ,a)))
+    (name |(| name |)| (lambda (a b c d) (declare (ignore b d)) `(:defined ,a ,c))))
 
   (primitive-type
    integer-expr
@@ -134,8 +134,8 @@
 
   (tagged-type
    (tag type (lambda (a b) `(:tagged-type ,a ,b)))
-   (tag implicit type (lambda (a b c) (declare (ignore b)) `(:implicit-tagged-type ,a ,c)))
-   (tag explicit type (lambda (a b c) (declare (ignore b)) `(:explicit-tagged-type ,a ,c))))
+   (tag implicit type (lambda (a b c) (declare (ignore b)) `(:tagged-type ,a ,c :explicit nil)))
+   (tag explicit type (lambda (a b c) (declare (ignore b)) `(:tagged-type ,a ,c :explicit t))))
 
   (integer-expr
    (integer (lambda (a) (declare (ignore a)) `(:integer)))
@@ -149,7 +149,7 @@
    (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range ,a nil))))
 
   (bit-string-option
-   (size |(| bit-string-range |)| (lambda (a b c d) (declare (ignore a b d)) `(:range ,c))))
+   (size |(| bit-string-range |)| (lambda (a b c d) (declare (ignore a b d)) c)))
 
   (bit-string-option-list 
    (bit-string-option (lambda (a) (list a)))
@@ -192,7 +192,7 @@
    (choice |{| alternative-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:choice ,c))))
   
   (tag 
-   (|[| class constant |]| (lambda (a b c d) (declare (ignore a d)) `(:tag ,b ,c))))
+   (|[| class constant |]| (lambda (a b c d) (declare (ignore a d)) `(,b ,c))))
 
   (class 
    (universal (lambda (a) (declare (ignore a)) :universal))
