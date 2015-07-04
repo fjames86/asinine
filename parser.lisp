@@ -241,11 +241,7 @@
 
 
 
-(defun gen (pathspec &optional lex)
-  "Parse the XDR definition file named by PATHSPEC. Generates a lisp file named by OUTFILE or PATHSPEC.lisp 
-with Lisp content suitable for use with frpc. Some hand modifications will be required.
-
-Returns the parsed contents."
+(defun gen (pathspec)
   (let ((body
 	 (with-open-file (f pathspec :direction :input)
 	   (with-output-to-string (s)
@@ -253,7 +249,6 @@ Returns the parsed contents."
 		 ((null l))
 	       (princ l s) 
 	       (fresh-line s))))))
-    (when lex (test-lexer body))
     (let ((forms (test-parser body)))
       forms)))
 
