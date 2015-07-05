@@ -9,5 +9,5 @@
   :serial t
   :components
   ((:file "package")
-   (:file "parser" ))
+   (:file "parser"))
   :depends-on (:alexandria :cl-lex :yacc))

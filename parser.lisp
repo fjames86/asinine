@@ -1,6 +1,9 @@
 
+(defpackage #:asinine.parser
+  (:use #:cl)
+  (:export #:parse-definition))
 
-(in-package #:asinine)
+(in-package #:asinine.parser)
 
 (cl-lex:define-string-lexer asn1-lexer 
   ("SEQUENCE" (return (values 'sequence 'sequence)))
@@ -239,9 +242,7 @@
 (defun test-parser (string)
   (yacc:parse-with-lexer (asn1-lexer string) *asn1-parser*))
 
-
-
-(defun gen (pathspec)
+(defun parse-definition (pathspec)
   (let ((body
 	 (with-open-file (f pathspec :direction :input)
 	   (with-output-to-string (s)
@@ -249,7 +250,5 @@
 		 ((null l))
 	       (princ l s) 
 	       (fresh-line s))))))
-    (let ((forms (test-parser body)))
-      forms)))
-
+    (test-parser body)))
 
