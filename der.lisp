@@ -18,10 +18,10 @@
 	   #:decode-octet-string
 	   #:encode-null
 	   #:decode-null
-	   #:encode-string
-	   #:decode-string 
-	   #:encode-generalized-string
-	   #:decode-generalized-string 
+	   #:encode-generalstring
+	   #:decode-generalstring 
+	   #:encode-time
+	   #:decode-time
 	   #:encode-oid
 	   #:decode-oid
 	   #:encode-sequence-of
@@ -246,13 +246,13 @@
 
 ;; ------------------------
 
-(defun encode-string (stream string)
+(defun encode-generalstring (stream string)
   (encode-identifier stream 27)
   (let ((octets (babel:string-to-octets string)))
     (encode-length stream (length octets))
     (write-sequence octets stream)))
 
-(defun decode-string (stream)
+(defun decode-generalstring (stream)
   (decode-identifier stream)
   (let ((length (decode-length stream)))
     (let ((octets (nibbles:make-octet-vector length)))
@@ -436,18 +436,39 @@
      (defun ,(alexandria:symbolicate 'decode- name) (stream)
        (,(alexandria:symbolicate 'decode- type-name) stream))))
      
+(defun generate-defoid (name vals)
+  `(defvar ,(alexandria:symbolicate '* name '-oid*)
+     ',(mapcar #'third vals)))
+
 (defun gen (asn1 &optional (stream *standard-output*))
-  (destructuring-bind (module-name assignments &key explicit implicit oid) asn1
+  (destructuring-bind (module-name assignments &key explicit implicit oid) (cdr asn1)
     (declare (ignore explicit implicit))
     ;; start by defining the oid 
-    (pprint `(defvar ,(alexandria:symbolicate '* module-name '*)
-	       ',(mapcar #'third oid))
-	    stream)
+    (pprint (generate-defoid module-name oid) stream)
     (dolist (assignment assignments)
       (destructuring-bind (name type-form) assignment
-	(ecase (car type-form)
-	  (:integer)
-	  (:defined)
-	  (:object-identifier)
-	  (:sequence)
-	  (:sequence-of))))))
+	(cond
+	  ((symbolp type-form)
+	   (pprint (generate-typedef name type-form)
+		   stream))
+	  ((eq (car type-form) :object-identifier)
+	   (pprint (generate-defoid name (cadr type-form))
+		   stream))
+	  ((eq (car type-form) :integer)
+	   (destructuring-bind (start &optional end) (cdr type-form)
+	     (declare (ignore start end))
+	     (pprint (generate-typedef name 'integer) stream)))
+	  ((eq (car type-form) :sequence)
+	   (destructuring-bind (slots &key class tag) (cdr type-form)
+	     (pprint `(defstruct ,name ,@(mapcar #'car slots)) stream)
+	     (pprint (generate-sequence-encoder name slots 
+						:class class
+						:tag tag)
+		     stream)
+	     (pprint (generate-sequence-decoder name slots
+						:class class
+						:tag tag)
+		     stream)))))))
+  asn1)
+
+

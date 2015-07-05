@@ -10,4 +10,4 @@
   :components
   ((:file "package")
    (:file "parser"))
-  :depends-on (:alexandria :cl-lex :yacc))
+  :depends-on (:alexandria :cl-lex :yacc :flexi-streams :babel :nibbles))

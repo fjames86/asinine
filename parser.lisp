@@ -42,7 +42,7 @@
   ("\\)" (return (values '|)| '|)|)))
   ("\\[" (return (values '|[| '|[|)))
   ("\\]" (return (values '|]| '|]|)))
-  "--(.*)--" ;; inline comment
+  "--(.*)--" ;; inline comment FIXME: doesn't work with multiple inline comments on a single line
   "--(.*)\\\n"  ;; single line comments
   ("0x([0-9a-fA-F]+)" (return (values 'constant (parse-integer (or $1 "") :radix 16))))
   ("[-]?[0-9]+" (return (values 'constant (parse-integer $@))))
@@ -96,10 +96,10 @@
    (assignment-list assignment (lambda (a b) (append a (list b)))))
 
   (assignment 
-   (name |::=| type (lambda (a b c) (declare (ignore b)) `(:assignment ,a ,c)))
+   (name |::=| type (lambda (a b c) (declare (ignore b)) `(,a ,c)))
    (name object identifier |::=| |{| object-identifier-list |}| 
 	 (lambda (a b c d e f g) (declare (ignore b c d e g))
-		 `(:assignment ,a (:object-identifier ,f)))))
+		 `(,a (:object-identifier ,f)))))
 
   (type 
    external-type 
@@ -115,8 +115,8 @@
    tagged-type)
 
   (defined-type
-    (name (lambda (a) `(:defined ,a)))
-    (name |(| name |)| (lambda (a b c d) (declare (ignore b d)) `(:defined ,a ,c))))
+    name
+    (name |(| name |)| (lambda (a b c d) (declare (ignore b c d)) a)))
 
   (primitive-type
    integer-expr
@@ -185,7 +185,7 @@
 
   (set 
    (set |{| element-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:set ,c)))
-   (set |{| |}| (lambda (a b c) (declare (ignore a b c)) `(:set))))
+   (set |{| |}| (lambda (a b c) (declare (ignore a b c)) `(:set nil))))
 
   (set-of 
    (set of type (lambda (a b c) (declare (ignore a b)) `(:set-of ,c))))
@@ -250,5 +250,7 @@
 		 ((null l))
 	       (princ l s) 
 	       (fresh-line s))))))
-    (test-parser body)))
+    (let ((asn1 (test-parser body)))
+      asn1)))
+
 
