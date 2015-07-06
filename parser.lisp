@@ -5,6 +5,23 @@
 
 (in-package #:asinine.parser)
 
+(defun lisp-name (string)
+  (with-output-to-string (s)
+    (do ((i 0 (1+ i))
+         (state :normal))
+        ((= i (length string)))
+      (let ((c (char string i)))
+        ;; if the previous character was a downcased character and this one is an upcased character then 
+        ;; output a - 
+        (cond
+          ((and (eq state :downcase) (upper-case-p c))
+           (princ #\- s)
+           (setf state :upcase))
+          ((lower-case-p c)
+           (setf state :downcase))
+          (t (setf state :normal)))
+        (princ (char-upcase c) s)))))
+
 (cl-lex:define-string-lexer asn1-lexer 
   ("SEQUENCE" (return (values 'sequence 'sequence)))
   ("OF" (return (values 'of 'of)))
@@ -42,12 +59,13 @@
   ("\\)" (return (values '|)| '|)|)))
   ("\\[" (return (values '|[| '|[|)))
   ("\\]" (return (values '|]| '|]|)))
-  "--(.*)--" ;; inline comment FIXME: doesn't work with multiple inline comments on a single line
+  ("\\|" (return (values 'pipe 'pipe)))
+  "--(.*?)--" ;; inline comment
   "--(.*)\\\n"  ;; single line comments
   ("0x([0-9a-fA-F]+)" (return (values 'constant (parse-integer (or $1 "") :radix 16))))
   ("[-]?[0-9]+" (return (values 'constant (parse-integer $@))))
   ("\\\"([0-9a-fA-F]+)\\\"" (return (values 'constant (parse-integer (or $1 "") :radix 16))))
-  ("[\\w-]+" (return (values 'name (alexandria:symbolicate (substitute #\- #\_ (string-upcase $@))))))
+  ("[\\w-]+" (return (values 'name (alexandria:symbolicate (lisp-name $@))))) ;;substitute #\- #\_ (string-upcase $@))))))
   )
 
 (defun test-lexer (string)
@@ -62,7 +80,7 @@
 ;; http://www.it.kau.se/cs/education/courses/dvgc02/08p4/labs/asn1_bnf.txt
 (yacc:define-parser *asn1-parser*
   (:start-symbol module-definition)
-  (:terminals (|::=| |,| |.| |{| |}| |(| |)| |..| |[| |]|
+  (:terminals (|::=| |,| |.| |{| |}| |(| |)| |..| |[| |]| pipe
 	       integer boolean bit octet string any null objid
 	       object identifier
 	       implicit explicit begin end definitions
@@ -142,13 +160,17 @@
   (integer-expr
    (integer (lambda (a) (declare (ignore a)) `(:integer)))
    (integer |(| constant |..| constant |)| 
-	    (lambda (a b c d e f) (declare (ignore a b d f)) `(:integer ,c ,e)))
-   (integer |(| constant |)| (lambda (a b c d) (declare (ignore a b d)) `(:integer ,c)))
-   (integer |{| named-number-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:integer ,c))))
+	    (lambda (a b c d e f) (declare (ignore a b d f)) `(:integer :range :start ,c :end ,e)))
+   (integer |(| constant-list |)| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c)))
+   (integer |{| named-number-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c))))
+
+  (constant-list 
+   (constant (lambda (a) (list a)))
+   (constant-list pipe constant (lambda (a b c) (declare (ignore b)) (append a (list c)))))
 
   (bit-string-range 
-   (constant |..| constant (lambda (a b c) (declare (ignore b)) `(:range ,a ,c)))
-   (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range ,a nil))))
+   (constant |..| constant (lambda (a b c) (declare (ignore b)) `(:range :start ,a :end ,c)))
+   (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range :start ,a :end nil))))
 
   (bit-string-option
    (size |(| bit-string-range |)| (lambda (a b c d) (declare (ignore a b d)) c)))
