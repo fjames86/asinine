@@ -53,7 +53,9 @@ HostAddresses   -- NOTE: subtly different from rfc1510,
 
 -- NOTE: AuthorizationData is always used as an OPTIONAL field and
 -- should not be empty.
-AuthorizationData       ::= SEQUENCE OF SEQUENCE {
+AuthorizationDataList	::= SEQUENCE OF AuthorizationData
+
+AuthorizationData       ::= SEQUENCE {
         ad-type         [0] Int32,
         ad-data         [1] OCTET STRING
 }
@@ -103,7 +105,7 @@ EncTicketPart   ::= [APPLICATION 3] SEQUENCE {
         endtime                 [7] KerberosTime,
         renew-till              [8] KerberosTime OPTIONAL,
         caddr                   [9] HostAddresses OPTIONAL,
-        authorization-data      [10] AuthorizationData OPTIONAL
+        authorization-data      [10] AuthorizationDataList OPTIONAL
 }
 
 -- encoded Transited field
@@ -212,7 +214,7 @@ EncTGSRepPart   ::= [APPLICATION 26] EncKDCRepPart
 
 EncKDCRepPart   ::= SEQUENCE {
         key             [0] EncryptionKey,
-        last-req        [1] LastReq,
+        last-req        [1] LastReqList,
         nonce           [2] UInt32,
         key-expiration  [3] KerberosTime OPTIONAL,
         flags           [4] TicketFlags,
@@ -225,7 +227,9 @@ EncKDCRepPart   ::= SEQUENCE {
         caddr           [11] HostAddresses OPTIONAL
 }
 
-LastReq         ::=     SEQUENCE OF SEQUENCE {
+LastReqList 	::= 	SEQUENCE OF LastReq
+
+LastReq         ::=     SEQUENCE {
         lr-type         [0] Int32,
         lr-value        [1] KerberosTime
 }
@@ -253,7 +257,7 @@ Authenticator   ::= [APPLICATION 2] SEQUENCE  {
         ctime                   [5] KerberosTime,
         subkey                  [6] EncryptionKey OPTIONAL,
         seq-number              [7] UInt32 OPTIONAL,
-        authorization-data      [8] AuthorizationData OPTIONAL
+        authorization-data      [8] AuthorizationDataList OPTIONAL
 }
 
 AP-REP          ::= [APPLICATION 15] SEQUENCE {
@@ -349,7 +353,9 @@ KRB-ERROR       ::= [APPLICATION 30] SEQUENCE {
 
 METHOD-DATA     ::= SEQUENCE OF PA-DATA
 
-TYPED-DATA      ::= SEQUENCE SIZE (1..MAX) OF SEQUENCE {
+TYPED-DATA-LIST      ::= SEQUENCE SIZE (1..MAX) OF TYPED-DATA
+
+TYPED-DATA	     ::= SEQUENCE {
         data-type       [0] Int32,
         data-value      [1] OCTET STRING OPTIONAL
 }
@@ -378,33 +384,33 @@ ETYPE-INFO2-ENTRY       ::= SEQUENCE {
 
 ETYPE-INFO2             ::= SEQUENCE SIZE (1..MAX) OF ETYPE-INFO2-ENTRY
 
-AD-IF-RELEVANT          ::= AuthorizationData
+AD-IF-RELEVANT          ::= AuthorizationDataList
 
 AD-KDCIssued            ::= SEQUENCE {
         ad-checksum     [0] Checksum,
         i-realm         [1] Realm OPTIONAL,
         i-sname         [2] PrincipalName OPTIONAL,
-        elements        [3] AuthorizationData
+        elements        [3] AuthorizationDataList
 }
 
 AD-AND-OR               ::= SEQUENCE {
         condition-count [0] Int32,
-        elements        [1] AuthorizationData
+        elements        [1] AuthorizationDataList
 }
 
-AD-MANDATORY-FOR-KDC    ::= AuthorizationData
+AD-MANDATORY-FOR-KDC    ::= AuthorizationDataList
 
 
-InitialContextToken ::=
-   [APPLICATION 0] IMPLICIT SEQUENCE {
-           thisMech        MechType,
+--InitialContextToken ::=
+--   [APPLICATION 0] IMPLICIT SEQUENCE {
+--           thisMech        MechType,
                    -- MechType is OBJECT IDENTIFIER
                    -- representing "Kerberos V5"
-           innerContextToken ANY DEFINED BY thisMech
+--           innerContextToken ANY DEFINED BY thisMech
                    -- contents mechanism-specific;
                    -- ASN.1 usage within innerContextToken
                    -- is not required
-           }
+--           }
 
 
 END

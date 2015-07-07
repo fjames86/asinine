@@ -1,5 +1,10 @@
 
 
 (defpackage #:asinine 
-  (:use #:cl))
+  (:use #:cl)
+  (:export #:defoid
+	   #:pack
+	   #:unpack))
+
+
 

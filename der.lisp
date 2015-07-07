@@ -1,7 +1,7 @@
-
+ 
 
 (defpackage #:asinine.der 
-  (:use #:cl)
+  (:use #:cl #:asinine)
   (:export #:encode-identifier
 	   #:decode-identifier
 	   #:encode-length 
@@ -18,14 +18,17 @@
 	   #:decode-octet-string
 	   #:encode-null
 	   #:decode-null
-	   #:encode-generalstring
-	   #:decode-generalstring 
-	   #:encode-time
-	   #:decode-time
+	   #:encode-general-string
+	   #:decode-general-string 
+	   #:encode-generalized-time
+	   #:decode-generalized-time
 	   #:encode-oid
 	   #:decode-oid
 	   #:encode-sequence-of
-	   #:decode-sequence-of))
+	   #:decode-sequence-of
+	   #:defsequence
+	   #:gen
+	   #:value))
 	   
 	   
 
@@ -246,13 +249,13 @@
 
 ;; ------------------------
 
-(defun encode-generalstring (stream string)
+(defun encode-general-string (stream string)
   (encode-identifier stream 27)
   (let ((octets (babel:string-to-octets string)))
     (encode-length stream (length octets))
     (write-sequence octets stream)))
 
-(defun decode-generalstring (stream)
+(defun decode-general-string (stream)
   (decode-identifier stream)
   (let ((length (decode-length stream)))
     (let ((octets (nibbles:make-octet-vector length)))
@@ -372,103 +375,191 @@
 
 ;; -----------------------------------------
 
+(defun encode-tagged-type (stream encoder value &key class tag)
+  (encode-identifier stream tag :class class :primitive nil)
+  (let ((bytes (flexi-streams:with-output-to-sequence (s)
+		 (funcall encoder s value))))
+    (encode-length stream (length bytes))
+    (write-sequence bytes stream)))
 
-(defun generate-sequence-encoder (name slots &key class tag)
-  `(defun ,(alexandria:symbolicate 'encode- name) (stream value)
-     (let* ((bytes (flexi-streams:with-output-to-sequence (s)
-		     ,@(mapcar (lambda (slot)
-				 (destructuring-bind (s-name s-type-name &key tag optional) slot 
-				   `(let ((the-value (,(alexandria:symbolicate name '- s-name) value)))
-				      (when ,(if optional 'the-value 't)
-					(let ((contents (flexi-streams:with-output-to-sequence (cs)
-							  (,(alexandria:symbolicate 'encode- s-type-name) cs the-value))))
-					  ,@(when tag 
-						  `((encode-identifier s ,tag :class :context :primitive nil)
-						    (encode-length s (length contents))))
-					  (write-sequence contents s))))))
-			       slots)))
-	    (length-bytes (flexi-streams:with-output-to-sequence (s)
-			    (encode-length s (length bytes)))))
-       ,@(when tag 
-	   `((encode-identifier stream ,tag :class ,(or class :context) :primitive nil)
-	     (encode-length stream (+ 1 (length bytes) (length length-bytes)))))
-       (encode-identifier stream 16 :primitive nil)
-       (encode-length stream length-bytes)
-       (write-sequence bytes stream))))
+(defun decode-tagged-type (stream decoder)
+  (decode-identifier stream)
+  (decode-length stream)
+  (funcall decoder stream))
 
-(defun generate-sequence-decoder (name slots &key class tag)
-  (declare (ignore class))
-  `(defun ,(alexandria:symbolicate 'decode- name) (stream)
-     ,@(when tag 
-         `((decode-identifier stream)
-	   (decode-length stream)))
-     (decode-identifier stream)
-     (let* ((length (decode-length stream))
-	    (value (,(alexandria:symbolicate 'make- name))))
-       ,(if (some (lambda (slot) (find :tag slot)) slots)
-	    ;; this is a tagged structure, assume all slots are tagged!
-	    `(let ((bytes (nibbles:make-octet-vector length)))
-	       (read-sequence bytes stream)
-	       (flexi-streams:with-input-from-sequence (s bytes)
-		 (do ()
-		     ((not (listen s)))
-		   (let ((the-tag (decode-identifier s)))
-		     (decode-length s)
-		     (ecase the-tag
-		       ,@(mapcar (lambda (slot)
-				   (destructuring-bind (s-name s-type-name &key tag &allow-other-keys) slot 
-				     `(,tag (setf (,(alexandria:symbolicate name '- s-name) value)
-						  (funcall ,(alexandria:symbolicate 'decode- s-type-name) s)))))
-				 slots))))))
-	    ;; this is a normal structure with all slots ordered and mandatory 
-	    `(progn
-	       ,@(mapcar (lambda (slot)
-			   (destructuring-bind (s-name s-type-name) slot 
-			     `(setf (,(alexandria:symbolicate name '- s-name) value)
-				    (funcall ,(alexandria:symbolicate 'decode- s-type-name) s))))
-			 slots)))
-       value)))
+;; -----------------------------------------
 
-(defun generate-typedef (name type-name)
+(defun encoder-name (name)
+  (alexandria:symbolicate 'encode- name))
+
+(defun decoder-name (name)
+  (alexandria:symbolicate 'decode- name))
+
+(defun accessor-name (sname name)
+  (alexandria:symbolicate sname '- name))
+
+(defmacro defsequence (name (&optional class tag) &rest slots)
   `(progn
-     (defun ,(alexandria:symbolicate 'encode- name) (stream value)
-       (,(alexandria:symbolicate 'encode- type-name) stream value))
-     (defun ,(alexandria:symbolicate 'decode- name) (stream)
-       (,(alexandria:symbolicate 'decode- type-name) stream))))
-     
-(defun generate-defoid (name vals)
-  `(defvar ,(alexandria:symbolicate '* name '-oid*)
-     ',(mapcar #'third vals)))
+     (defstruct ,name ,@(mapcar #'car slots))
+     (defun ,(encoder-name name) (stream value)
+       (declare (type ,name value)
+		(type stream stream))
+       (flet ((enc (stream)
+		(let ((bytes (flexi-streams:with-output-to-sequence (s)
+			       ,@(mapcar (lambda (slot)
+					   (destructuring-bind (s-name s-type &key tag optional) slot 
+					     `(flet ((enc (stream v)
+						       ,@(cond
+							  ((symbolp s-type) 
+							   `((,(encoder-name s-type) stream v)))
+							  ((eq (car s-type) :integer)
+							   `((encode-integer stream v)))
+							  ((eq (car s-type) :sequence-of)
+							   `((encode-sequence-of stream 
+										#',(encoder-name (cadr s-type))
+										v))))))
+						,(cond
+						  (tag 
+						   `(let ((v (,(accessor-name name s-name) value)))
+						      (when ,(if optional 'v 't)
+							(encode-tagged-type s #'enc v
+									    :class :context 
+									    :tag ,tag))))
+						  (t 
+						   `(enc s (,(accessor-name name s-name) value)))))))
+					 slots))))
+		  (encode-length stream (length bytes))
+		  (write-sequence bytes stream))))
+	 ,(if (and class tag)
+	      `(encode-tagged-type stream #'enc value
+				   :class ,class :tag ,tag)
+	      `(enc stream))))
+     (defun ,(decoder-name name) (stream)
+       (declare (type stream stream))
+       (flet ((dec (stream)
+		(decode-identifier stream)
+		(decode-length stream)
+		(let ((value (,(alexandria:symbolicate 'make- name))))
+		  ,(if (some #'(lambda (slot) (find :tag slot)) slots)
+		       ;; FIXME: this is broken because it only reads once, should actually loop
+		       ;; until the stream has been exhausted
+		       `(let ((tag (decode-identifier stream)))
+			  (decode-length stream)
+			  (ecase tag 
+			    ,@(mapcar (lambda (slot)
+					(destructuring-bind (s-name s-type &key tag optional) slot 
+					  (declare (ignore optional))
+					  `(,tag 
+					     (flet ((dec (stream)
+						      ,@(cond
+							 ((symbolp s-type) 
+							  `((,(decoder-name s-type) stream)))
+							 ((eq (car s-type) :integer)
+							  `((decode-integer stream)))
+							 ((eq (car s-type) :sequence-of)
+							  `((decode-sequence-of stream 
+										#',(decoder-name (cadr s-type))))))))
+					       (setf (,(accessor-name name s-name) value)
+						     (dec stream))))))
+				      slots)))
+		       `(progn
+			  ,@(mapcar (lambda (slot)
+				      (destructuring-bind (s-name s-type) slot 
+					`(flet ((dec (stream)
+						  ,@(cond
+						     ((symbolp s-type) 
+						      `((,(decoder-name s-type) stream)))
+						     ((eq (car s-type) :integer)
+						      `((decode-integer stream)))
+						     ((eq (car s-type) :sequence-of)
+						      `((decode-sequence-of stream 
+									   #',(decoder-name (cadr s-type))))))))
+					   (setf (,(accessor-name name s-name) value)
+						 (dec stream)))))
+				    slots))))))
+	 ,(if (and class tag)
+	      `(decode-tagged-type stream #'dec)
+	      `(dec stream))))))
+	      
+
+;; -----------------------------------
 
 (defun gen (asn1 &optional (stream *standard-output*))
   (destructuring-bind (module-name assignments &key explicit implicit oid) (cdr asn1)
     (declare (ignore explicit implicit))
-    ;; start by defining the oid 
-    (pprint (generate-defoid module-name oid) stream)
-    (dolist (assignment assignments)
-      (destructuring-bind (name type-form) assignment
-	(cond
-	  ((symbolp type-form)
-	   (pprint (generate-typedef name type-form)
-		   stream))
-	  ((eq (car type-form) :object-identifier)
-	   (pprint (generate-defoid name (cadr type-form))
-		   stream))
-	  ((eq (car type-form) :integer)
-	   (destructuring-bind (start &optional end) (cdr type-form)
-	     (declare (ignore start end))
-	     (pprint (generate-typedef name 'integer) stream)))
-	  ((eq (car type-form) :sequence)
-	   (destructuring-bind (slots &key class tag) (cdr type-form)
-	     (pprint `(defstruct ,name ,@(mapcar #'car slots)) stream)
-	     (pprint (generate-sequence-encoder name slots 
-						:class class
-						:tag tag)
+    (let ((*print-case* :downcase))
+      (pprint `(defpackage ,(string-upcase module-name)
+		 (:use #:cl #:asinine #:asinine.der))
+	      stream)
+      (terpri stream)
+      (pprint `(in-package ,(string-upcase module-name))
+	      stream)
+      (terpri stream)
+
+      ;; start by defining the oid 
+      (pprint `(asinine::defoid ,module-name ,@(mapcar #'third oid)) stream)
+      (terpri stream)
+
+      ;; generate each assignment 
+      (dolist (assignment assignments)
+	(destructuring-bind (name type-form) assignment
+	  (cond
+	    ((symbolp type-form)
+	     (pprint `(defun ,(encoder-name name) (stream value) 
+			(,(encoder-name type-form) stream value))
 		     stream)
-	     (pprint (generate-sequence-decoder name slots
-						:class class
-						:tag tag)
-		     stream)))))))
-  asn1)
+	     (pprint `(defun ,(decoder-name name) (stream)
+			(,(decoder-name type-form) stream))
+		     stream))
+	    ((eq (car type-form) :integer)
+	     (pprint `(defun ,(encoder-name name) (stream value)
+			(encode-integer stream value))
+		     stream)
+	     (pprint `(defun ,(decoder-name name) (stream)
+			(decode-integer stream))
+		     stream))
+	    ((eq (car type-form) :bit-string)
+	     (pprint `(defun ,(encoder-name name) (stream value)
+			(encode-bit-string stream value))
+		     stream)
+	     (pprint `(defun ,(decoder-name name) (stream)
+			(decode-bit-string stream))
+		     stream))
+	    ((eq (car type-form) :octet-string)
+	     (pprint `(defun ,(encoder-name name) (stream value)
+			(encode-octet-string stream value))
+		     stream)
+	     (pprint `(defun ,(decoder-name name) (stream)
+			(decode-octet-string stream))
+		     stream))
+	    ((eq (car type-form) :sequence-of)
+	     (let ((type-form (cadr type-form)))
+	       (unless (symbolp type-form) 
+		 (error "assigment ~A sequence-of must be a symbol" name))
+	       (pprint `(defun ,(encoder-name name) (stream value)
+			  (encode-sequence-of stream #',(encoder-name type-form) value))
+		       stream)
+	       (pprint `(defun ,(decoder-name name) (stream)
+			  (decode-sequence-of stream #',(decoder-name type-form)))
+		       stream)))
+	    ((eq (car type-form) :sequence)
+	     (pprint `(defsequence ,name () ,@(cadr type-form)) stream))
+	    ((eq (car type-form) :tagged-type)
+	     (destructuring-bind ((class tag) real-type &key &allow-other-keys) (cdr type-form)
+	       (cond
+		 ((symbolp real-type)
+		  (pprint `(defun ,(encoder-name name) (stream value)
+			     (encode-tagged-type stream #',(encoder-name real-type) value
+						 :class ,class :tag ,tag))
+			  stream)
+		  (pprint `(defun ,(decoder-name name) (stream)
+			     (decode-tagged-type stream #',(decoder-name real-type)))
+			  stream))
+		 ((eq (car real-type) :sequence)
+		  (pprint `(defsequence ,name (,class ,tag) ,@(cadr real-type))
+			  stream)))))
+	    (t (warn "Not generating assignment for ~A" name))))
+	(terpri stream))))
+  nil)
 
 

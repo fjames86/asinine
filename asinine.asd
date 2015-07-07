@@ -9,5 +9,7 @@
   :serial t
   :components
   ((:file "package")
-   (:file "parser"))
+   (:file "parser")
+   (:file "asn1")
+   (:file "der"))
   :depends-on (:alexandria :cl-lex :yacc :flexi-streams :babel :nibbles))
