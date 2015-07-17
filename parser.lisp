@@ -1,10 +1,11 @@
 
 
-(defpackage #:asinine.parser
+(defpackage #:asinine-parser
   (:use #:cl)
-  (:export #:parse-definition))
+  (:export #:parse-definition
+	   #:compile-dxefinition))
 
-(in-package #:asinine.parser)
+(in-package #:asinine-parser)
 
 (defun lisp-name (string)
   (with-output-to-string (s)
