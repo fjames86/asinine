@@ -276,4 +276,13 @@
     (let ((asn1 (test-parser body)))
       asn1)))
 
+(defun compile-definition (pathspec &optional outfile)
+  (let ((*package* (find-package "ASININE"))
+	(pathname (or outfile 
+		      (merge-pathnames (make-pathname :type "lisp")
+				       (truename pathspec)))))
+    (with-open-file (f pathname :direction :output :if-exists :supersede)
+      (asinine:gen (asinine.parser:parse-definition pathspec)
+	   f))))
+
 

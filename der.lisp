@@ -1,40 +1,14 @@
  
+(in-package #:asinine)
 
-(defpackage #:asinine.der 
-  (:use #:cl #:asinine)
-  (:export #:encode-identifier
-	   #:decode-identifier
-	   #:encode-length 
-	   #:decode-length 
-	   #:encode-boolean
-	   #:decode-boolean
-	   #:encode-integer
-	   #:decode-integer
-	   #:encode-uinteger
-	   #:decode-uinteger
-	   #:encode-bit-string
-	   #:decode-bit-string
-	   #:encode-octet-string
-	   #:decode-octet-string
-	   #:encode-null
-	   #:decode-null
-	   #:encode-general-string
-	   #:decode-general-string 
-	   #:encode-generalized-time
-	   #:decode-generalized-time
-	   #:encode-oid
-	   #:decode-oid
-	   #:encode-sequence-of
-	   #:decode-sequence-of
-	   #:encode-tagged-type
-	   #:decode-tagged-type
-	   #:defsequence
-	   #:gen
-	   #:value))
-	   
-	   
+(defun pack (encoder value)
+  (flexi-streams:with-output-to-sequence (s)
+    (funcall encoder s value)))
 
-(in-package #:asinine.der)
+(defun unpack (decoder buffer)
+  (flexi-streams:with-input-from-sequence (s buffer)
+    (funcall decoder s)))
+
 
 (defun encode-identifier (stream tag &key (class :universal) (primitive t))
   (declare (type (integer 0 30) tag))
@@ -496,7 +470,7 @@
     (declare (ignore explicit implicit))
     (let ((*print-case* :downcase))
       (pprint `(defpackage ,(string-upcase module-name)
-		 (:use #:cl #:asinine #:asinine.der))
+		 (:use #:cl #:asinine #:asinine))
 	      stream)
       (terpri stream)
       (pprint `(in-package ,(string-upcase module-name))
@@ -575,12 +549,3 @@
 	(terpri stream))))
   nil)
 
-
-(defun compile-definition (pathspec &optional outfile)
-  (let ((*package* (find-package "ASININE.DER"))
-	(pathname (or outfile 
-		      (merge-pathnames (make-pathname :type "lisp")
-				       (truename pathspec)))))
-    (with-open-file (f pathname :direction :output :if-exists :supersede)
-      (gen (asinine.parser:parse-definition pathspec)
-	   f))))
