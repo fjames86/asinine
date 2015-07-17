@@ -2,8 +2,9 @@
 
 (defpackage #:asinine-parser
   (:use #:cl)
+  (:nicknames #:asn1-parser)
   (:export #:parse-definition
-	   #:compile-dxefinition))
+	   #:compile-definition))
 
 (in-package #:asinine-parser)
 
@@ -231,7 +232,8 @@
    (named-number-list |,| named-number (lambda (a b c) (declare (ignore b)) (append a (list c)))))
   
   (named-number 
-   (name |(| constant |)| (lambda (a b c d) (declare (ignore b d)) `(:number ,a ,c))))
+   (name |(| constant |)| (lambda (a b c d) (declare (ignore b d)) `(:number ,a ,c)))
+   (constant (lambda (a) `(:number nil ,a))))
 
   (named-bit-list 
    (named-bit (lambda (a) (list a)))
@@ -267,6 +269,7 @@
   (yacc:parse-with-lexer (asn1-lexer string) *asn1-parser*))
 
 (defun parse-definition (pathspec)
+  "Parse the ASN.1 specification stored in the file named by PATHSPEC. Returns the parsed definition."
   (let ((body
 	 (with-open-file (f pathspec :direction :input)
 	   (with-output-to-string (s)
@@ -278,12 +281,19 @@
       asn1)))
 
 (defun compile-definition (pathspec &optional outfile)
+  "Parse an ASN.1 definition and generate a Lisp file with functions to encode/decode using DER.
+
+PATHSPEC ::= the ASN.1 definition.
+OUTFILE ::= name of file to put the Lisp code into, defaults to the ASN.1 definition with the extension .lisp.
+
+Returns the parsed contents."
   (let ((*package* (find-package "ASININE"))
 	(pathname (or outfile 
 		      (merge-pathnames (make-pathname :type "lisp")
 				       (truename pathspec)))))
     (with-open-file (f pathname :direction :output :if-exists :supersede)
-      (asinine:gen (asinine.parser:parse-definition pathspec)
-	   f))))
+      (let ((asn1 (parse-definition pathspec)))
+	(asinine:gen asn1 f)
+	asn1))))
 
 

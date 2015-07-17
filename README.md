@@ -40,7 +40,12 @@ The Kerberos V5 specifications is provided as an example.
 
 Should produce as file "krb5.lisp".
 
-## 4. License
+## 4. TODO
+[ ] Support sequences with mixtures of tagged and non-tagged elements
+[ ] Support CHOICE types
+
+
+## 5. License
 Licensed under the terms of the MIT license.
 
 Frank James
