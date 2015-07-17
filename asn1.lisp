@@ -12,12 +12,6 @@
   (flexi-streams:with-input-from-sequence (s buffer)
     (funcall decoder s)))
 
-;; -----------------------------
-
-(defvar *oids* nil)
-(defmacro defoid (name &rest integers)
-  `(push (cons ',name (list ,@integers)) *oids*))
-
 ;; ----------------------------
 
 ;; Q: how to define various encoding rules? 

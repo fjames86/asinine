@@ -26,6 +26,8 @@
 	   #:decode-oid
 	   #:encode-sequence-of
 	   #:decode-sequence-of
+	   #:encode-tagged-type
+	   #:decode-tagged-type
 	   #:defsequence
 	   #:gen
 	   #:value))
@@ -428,6 +430,7 @@
 						  (t 
 						   `(enc s (,(accessor-name name s-name) value)))))))
 					 slots))))
+		  (encode-identifier stream 16 :primitive nil)
 		  (encode-length stream (length bytes))
 		  (write-sequence bytes stream))))
 	 ,(if (and class tag)
@@ -438,31 +441,34 @@
        (declare (type stream stream))
        (flet ((dec (stream)
 		(decode-identifier stream)
-		(decode-length stream)
 		(let ((value (,(alexandria:symbolicate 'make- name))))
-		  ,(if (some #'(lambda (slot) (find :tag slot)) slots)
-		       ;; FIXME: this is broken because it only reads once, should actually loop
-		       ;; until the stream has been exhausted
-		       `(let ((tag (decode-identifier stream)))
-			  (decode-length stream)
-			  (ecase tag 
-			    ,@(mapcar (lambda (slot)
-					(destructuring-bind (s-name s-type &key tag optional) slot 
-					  (declare (ignore optional))
-					  `(,tag 
-					     (flet ((dec (stream)
-						      ,@(cond
-							 ((symbolp s-type) 
-							  `((,(decoder-name s-type) stream)))
-							 ((eq (car s-type) :integer)
-							  `((decode-integer stream)))
-							 ((eq (car s-type) :sequence-of)
-							  `((decode-sequence-of stream 
-										#',(decoder-name (cadr s-type))))))))
-					       (setf (,(accessor-name name s-name) value)
-						     (dec stream))))))
-				      slots)))
+		  ,(if (some (lambda (slot) (find :tag slot)) slots)
+		       `(let ((v (nibbles:make-octet-vector (decode-length stream))))
+			  (read-sequence v stream)
+			  (flexi-streams:with-input-from-sequence (stream v)
+			    (do ()
+				((not (listen stream)))
+			      (let ((tag (decode-identifier stream)))
+				(decode-length stream)
+				(ecase tag 
+				  ,@(mapcar (lambda (slot)
+					      (destructuring-bind (s-name s-type &key tag optional) slot 
+						(declare (ignore optional))
+						`(,tag 
+						  (flet ((dec (stream)
+							   ,@(cond
+							      ((symbolp s-type) 
+							       `((,(decoder-name s-type) stream)))
+							      ((eq (car s-type) :integer)
+							       `((decode-integer stream)))
+							      ((eq (car s-type) :sequence-of)
+							       `((decode-sequence-of stream 
+										     #',(decoder-name (cadr s-type))))))))
+						    (setf (,(accessor-name name s-name) value)
+							  (dec stream))))))
+					    slots))))))
 		       `(progn
+			  (decode-length stream)
 			  ,@(mapcar (lambda (slot)
 				      (destructuring-bind (s-name s-type) slot 
 					`(flet ((dec (stream)
@@ -476,7 +482,8 @@
 									   #',(decoder-name (cadr s-type))))))))
 					   (setf (,(accessor-name name s-name) value)
 						 (dec stream)))))
-				    slots))))))
+				    slots)))
+		  value)))
 	 ,(if (and class tag)
 	      `(decode-tagged-type stream #'dec)
 	      `(dec stream))))))
@@ -497,7 +504,8 @@
       (terpri stream)
 
       ;; start by defining the oid 
-      (pprint `(asinine::defoid ,module-name ,@(mapcar #'third oid)) stream)
+      (pprint `(defparameter ,(alexandria:symbolicate '* module-name '-oid*) (list ,@(mapcar #'third oid))) 
+	      stream)
       (terpri stream)
 
       ;; generate each assignment 
@@ -558,8 +566,21 @@
 		 ((eq (car real-type) :sequence)
 		  (pprint `(defsequence ,name (,class ,tag) ,@(cadr real-type))
 			  stream)))))
+	    ((eq (car type-form) :object-identifier)
+	     (let ((named-ints (cadr type-form)))
+	       (pprint `(defparameter ,(alexandria:symbolicate '* name '-oid*)
+			  (list ,@(mapcar #'third named-ints)))
+		       stream)))
 	    (t (warn "Not generating assignment for ~A" name))))
 	(terpri stream))))
   nil)
 
 
+(defun compile-definition (pathspec &optional outfile)
+  (let ((*package* (find-package "ASININE.DER"))
+	(pathname (or outfile 
+		      (merge-pathnames (make-pathname :type "lisp")
+				       (truename pathspec)))))
+    (with-open-file (f pathname :direction :output :if-exists :supersede)
+      (gen (asinine.parser:parse-definition pathspec)
+	   f))))

@@ -2,8 +2,7 @@
 
 (defpackage #:asinine 
   (:use #:cl)
-  (:export #:defoid
-	   #:pack
+  (:export #:pack
 	   #:unpack))
 
 
