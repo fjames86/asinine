@@ -41,7 +41,7 @@
   ("TAGS" (return (values 'tags 'tags)))
   ("IMPLICIT" (return (values 'implicit 'implicit)))
   ("EXPLICIT" (return (values 'explicit 'explicit)))
-  ("CHOICE" (return (values 'choice 'choice)))
+  ("CHOICE" (return (values 'choicesym 'choicesym)))
   ("DEFINITIONS" (return (values 'definitions 'definitions)))
   ("OBJECT" (return (values 'object 'object)))
   ("IDENTIFIER" (return (values 'identifier 'identifier)))
@@ -53,6 +53,7 @@
   ("PRIVATE" (return (values 'private 'private)))
   ("BY" (return (values 'by 'by)))
   ("DEFINED" (return (values 'defined 'defined)))
+  ("DEFAULT" (return (values 'defaultsym 'defaultsym)))
   ("\\.\\." (return (values '|..| '|..|)))
   ("\\." (return (values '|.| '|.|)))
   ("\\:\\:\\=" (return (values '|::=| '|::=|)))
@@ -86,9 +87,9 @@
   (:start-symbol module-definition)
   (:terminals (|::=| |,| |.| |{| |}| |(| |)| |..| |[| |]| pipe
 	       integer boolean bit octet string any null
-	       object identifier
+	       object identifier defaultsym
 	       implicit explicit begin end definitions
-	       sequence setsym of tags choice optional defined by
+	       sequence setsym of tags choicesym optional defined by
 	       application universal private
 	       name constant
 	       size max))
@@ -174,8 +175,14 @@
    (integer (lambda (a) (declare (ignore a)) `(:integer)))
    (integer |(| constant |..| constant |)| 
 	    (lambda (a b c d e f) (declare (ignore a b d f)) `(:integer :range :start ,c :end ,e)))
+   (integer |(| constant |..| name |)|
+	    (lambda (a b c d e f) (declare (ignore a b d f))
+		    `(:integer :range :start ,c :end ,e)))
    (integer |(| constant-list |)| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c)))
-   (integer |{| named-number-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c))))
+   (integer |{| named-number-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c)))
+   (integer |{| named-number-list |}| |(| constant |..| name |)|
+	    (lambda (a b c d e f g h i) (declare (ignore a b d e g i))
+		    `(:integer :member ,c :start ,f :end ,h))))
 
   (constant-list 
    (constant (lambda (a) (list a)))
@@ -185,7 +192,9 @@
    (constant |..| constant (lambda (a b c) (declare (ignore b)) `(:range :start ,a :end ,c)))
    (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range :start ,a :end nil)))
    (constant |..| name (lambda (a b c) (declare (ignore b))
-			       `(:range :start ,a :end ,c))))
+			       `(:range :start ,a :end ,c)))
+   (constant (lambda (a) `(:integer :member (,a))))
+   (name (lambda (a) `(:integer :member (,a)))))
 
   (bit-string-option
    (size |(| bit-string-range |)| (lambda (a b c d) (declare (ignore a b d)) c)))
@@ -225,10 +234,13 @@
    (setsym |{| |}| (lambda (a b c) (declare (ignore a b c)) `(:set nil))))
 
   (set-of 
-   (setsym of type (lambda (a b c) (declare (ignore a b)) `(:set-of ,c))))
+   (setsym of type (lambda (a b c) (declare (ignore a b)) `(:set-of ,c)))
+   (setsym bit-string-option-list of type
+	   (lambda (a b c d) (declare (ignore a c))
+		   `(:set-of ,d :options ,b))))
 
   (choice 
-   (choice |{| alternative-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:choice ,c))))
+   (choicesym |{| alternative-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:choice ,c))))
   
   (tag 
    (|[| class constant |]| (lambda (a b c d) (declare (ignore a d)) `(,b ,c))))
@@ -259,17 +271,30 @@
    (element-type (lambda (a) (list a)))
    (element-type-list |,| element-type (lambda (a b c) (declare (ignore b)) (append a (list c)))))
 
+  (value 
+   name 
+   constant)
+
   (element-type 
    named-type 
    (named-type optional (lambda (a b) (declare (ignore b)) (append a `(:optional t))))
-   (named-type default value (lambda (a b c) (declare (ignore b)) (append a `(:default ,c))))
+   (named-type defaultsym value (lambda (a b c) (declare (ignore b)) (append a `(:default ,c))))
    (named-type defined by name
 	       (lambda (a b c d) (declare (ignore b c))
-		       (append a `(:defined-by ,d)))))
+		       (append a `(:defined-by ,d))))
+   (named-type defined by name optional
+	       (lambda (a b c d e) (declare (ignore b c e))
+		       (append a `(:defined-by ,d :optional t)))))
 
   (named-type
    (name type)
    (name |[| constant |]| type (lambda (a b c d e) (declare (ignore b d)) `(,a ,e :tag ,c)))
+   (name |[| constant |]| implicit type
+	 (lambda (a b c d e f) (declare (ignore b d e))
+		 `(,a ,f :tag ,c :implicit t)))
+   (name |[| constant |]| explicit type
+	 (lambda (a b c d e f) (declare (ignore b d e))
+		 `(,a ,f :tag ,c :explicit t)))
    (type (lambda (a) `(nil ,a))))
 
   (alternative-type-list 

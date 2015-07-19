@@ -118,7 +118,7 @@ X520CommonName ::= CHOICE {
       printableString   PrintableString (SIZE (1..ub-common-name)),
       universalString   UniversalString (SIZE (1..ub-common-name)),
       utf8String        UTF8String      (SIZE (1..ub-common-name)),
-      bmpString         BMPString       (SIZE (1..ub-common-name)) 
+      bmpString         BMPString       (SIZE (1..ub-common-name))
 }
 
 
@@ -243,7 +243,6 @@ X520Pseudonym ::= CHOICE {
    universalString   UniversalString (SIZE (1..ub-pseudonym)),
    utf8String        UTF8String      (SIZE (1..ub-pseudonym)),
    bmpString         BMPString       (SIZE (1..ub-pseudonym)) }
-
 
 -- Naming attributes of type DomainComponent (from RFC 4519)
 
@@ -524,7 +523,6 @@ PostalCode ::= CHOICE {
 physical-delivery-office-name INTEGER ::= 10
 
 
-
 PhysicalDeliveryOfficeName ::= PDSParameter
 
 physical-delivery-office-number INTEGER ::= 11
@@ -607,7 +605,7 @@ TerminalType ::= INTEGER {
    g3-facsimile (5),
    g4-facsimile (6),
    ia5-terminal (7),
-   videotex     (8) } (0..ub-integer-options)
+   videotex     (8) } (0..ub-integer-options) 
 
 -- Extension Domain-defined Attributes
 
