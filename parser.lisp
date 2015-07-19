@@ -27,6 +27,7 @@
 
 (cl-lex:define-string-lexer asn1-lexer 
   ("SEQUENCE" (return (values 'sequence 'sequence)))
+  ("SET" (return (values 'setsym 'setsym)))
   ("OF" (return (values 'of 'of)))
   ("INTEGER" (return (values 'integer 'integer)))
   ("BOOLEAN" (return (values 'boolean 'boolean)))
@@ -84,10 +85,10 @@
 (yacc:define-parser *asn1-parser*
   (:start-symbol module-definition)
   (:terminals (|::=| |,| |.| |{| |}| |(| |)| |..| |[| |]| pipe
-	       integer boolean bit octet string any null objid
+	       integer boolean bit octet string any null
 	       object identifier
 	       implicit explicit begin end definitions
-	       sequence of tags choice optional defined by
+	       sequence setsym of tags choice optional defined by
 	       application universal private
 	       name constant
 	       size max))
@@ -120,7 +121,13 @@
    (name |::=| type (lambda (a b c) (declare (ignore b)) `(,a ,c)))
    (name object identifier |::=| |{| object-identifier-list |}| 
 	 (lambda (a b c d e f g) (declare (ignore b c d e g))
-		 `(,a (:object-identifier ,f)))))
+		 `(,a (:object-identifier ,f))))
+   (name name |::=| |{| object-identifier-list |}|
+	 (lambda (a b c d e f) (declare (ignore c d f))
+		 `(,a (:object-identifier-alias ,b ,e))))
+   (name integer |::=| constant 
+	 (lambda (a b c d) (declare (ignore b c))
+		 `(,a (:integer ,d)))))
 
   (type 
    external-type 
@@ -137,7 +144,10 @@
 
   (defined-type
     name
-    (name |(| name |)| (lambda (a b c d) (declare (ignore b c d)) a)))
+    (name |(| name |)| (lambda (a b c d) (declare (ignore b c d)) a))
+    (name |(| bit-string-option-list |)|
+	  (lambda (a b c d) (declare (ignore b c d))
+		  a)))
 
   (primitive-type
    integer-expr
@@ -173,7 +183,9 @@
 
   (bit-string-range 
    (constant |..| constant (lambda (a b c) (declare (ignore b)) `(:range :start ,a :end ,c)))
-   (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range :start ,a :end nil))))
+   (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range :start ,a :end nil)))
+   (constant |..| name (lambda (a b c) (declare (ignore b))
+			       `(:range :start ,a :end ,c))))
 
   (bit-string-option
    (size |(| bit-string-range |)| (lambda (a b c d) (declare (ignore a b d)) c)))
@@ -209,11 +221,11 @@
 		     `(:sequence-of ,d :size ,b))))
 
   (set 
-   (set |{| element-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:set ,c)))
-   (set |{| |}| (lambda (a b c) (declare (ignore a b c)) `(:set nil))))
+   (setsym |{| element-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:set ,c)))
+   (setsym |{| |}| (lambda (a b c) (declare (ignore a b c)) `(:set nil))))
 
   (set-of 
-   (set of type (lambda (a b c) (declare (ignore a b)) `(:set-of ,c))))
+   (setsym of type (lambda (a b c) (declare (ignore a b)) `(:set-of ,c))))
 
   (choice 
    (choice |{| alternative-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:choice ,c))))
@@ -233,7 +245,8 @@
   
   (named-number 
    (name |(| constant |)| (lambda (a b c d) (declare (ignore b d)) `(:number ,a ,c)))
-   (constant (lambda (a) `(:number nil ,a))))
+   (constant (lambda (a) `(:number nil ,a)))
+   (name (lambda (a) `(:number ,a nil))))
 
   (named-bit-list 
    (named-bit (lambda (a) (list a)))
