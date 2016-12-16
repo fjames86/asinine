@@ -52,7 +52,7 @@
        (do ((len length))
            ((zerop len))
          (push (the (unsigned-byte 8)
-                 (logand len #xff))
+                    (logand len #xff))
                octets)
          (setf len (ash len -8)))
        (write-byte (logior (length octets) #x80) stream)
@@ -117,14 +117,14 @@
     (setf (nibbles:sb32ref/be v 0) int)
     ;; we need to use the minimal number of octets
     (let ((len
-           (cond
-             ((and (>= int (- (expt 2 7))) (< int (expt 2 7)))
-              1)
-             ((and (>= int (- (expt 2 15))) (< int (expt 2 15)))
-              2)
-             ((and (>= int (- (expt 2 23))) (< int (expt 2 23)))
-              3)
-             (t 4))))
+            (cond
+              ((and (>= int (- (expt 2 7))) (< int (expt 2 7)))
+               1)
+              ((and (>= int (- (expt 2 15))) (< int (expt 2 15)))
+               2)
+              ((and (>= int (- (expt 2 23))) (< int (expt 2 23)))
+               3)
+              (t 4))))
       (encode-length stream len)
       (write-sequence v stream :start (- 4 len)))))
 
@@ -142,14 +142,14 @@
     (setf (nibbles:ub32ref/be v 0) int)
     ;; we need to use the minimal number of octets
     (let ((len
-           (cond
-             ((< int (expt 2 8))
-              1)
-             ((< int (expt 2 16))
-              2)
-             ((< int (expt 2 24))
-              3)
-             (t 4))))
+            (cond
+              ((< int (expt 2 8))
+               1)
+              ((< int (expt 2 16))
+               2)
+              ((< int (expt 2 24))
+               3)
+              (t 4))))
       (encode-length stream len)
       (write-sequence v stream :start (- 4 len)))))
 
@@ -186,7 +186,7 @@
   (let ((n (1- (decode-length stream))))
     (read-byte stream)
     (let ((octets (loop :for i :below n
-                     :collect (read-byte stream))))
+                        :collect (read-byte stream))))
       (nibbles:ub32ref/le (let ((v (nibbles:make-octet-vector 4)))
                             (dotimes (i n)
                               (setf (aref v i) (reverse-octet (nth i octets))))
@@ -285,27 +285,27 @@
 (defun encode-oid (stream oid)
   (encode-identifier stream 6)
   (let ((bytes
-         (flexi-streams:with-output-to-sequence (s)
-           (let ((b1 (car oid))
-                 (b2 (cadr oid)))
-             (write-byte (logior (* b1 40) b2) s)
-             (dolist (b (cddr oid))
-               (cond
-                 ((<= b 127)
-                  (write-byte b s))
-                 (t
-                  ;; if > 127, then we write multiple 7-bit bytes, 1st byte or'd with #x80
-                  (do ((bytes nil)
-                       (num b (ash num -7)))
-                      ((zerop num)
-                       (do ((%bytes bytes (cdr %bytes)))
-                           ((null %bytes))
-                         (if (null (cdr %bytes))
-                             ;; last one
-                             (write-byte (car %bytes) s)
-                             ;; all others, or with #x80
-                             (write-byte (logior (car %bytes) #x80) s))))
-                    (push (logand num #x7f) bytes)))))))))
+          (flexi-streams:with-output-to-sequence (s)
+            (let ((b1 (car oid))
+                  (b2 (cadr oid)))
+              (write-byte (logior (* b1 40) b2) s)
+              (dolist (b (cddr oid))
+                (cond
+                  ((<= b 127)
+                   (write-byte b s))
+                  (t
+                   ;; if > 127, then we write multiple 7-bit bytes, 1st byte or'd with #x80
+                   (do ((bytes nil)
+                        (num b (ash num -7)))
+                       ((zerop num)
+                        (do ((%bytes bytes (cdr %bytes)))
+                            ((null %bytes))
+                          (if (null (cdr %bytes))
+                              ;; last one
+                              (write-byte (car %bytes) s)
+                              ;; all others, or with #x80
+                              (write-byte (logior (car %bytes) #x80) s))))
+                     (push (logand num #x7f) bytes)))))))))
     (encode-length stream (length bytes))
     (write-sequence bytes stream)))
 
@@ -315,20 +315,20 @@
   (let ((length (decode-length stream)))
     (let ((bytes (nibbles:make-octet-vector length)))
       (flexi-streams:with-input-from-sequence (s bytes :start 1) (read-sequence bytes stream)
-      (do ((oid (list (truncate (aref bytes 0) 40) (mod (aref bytes 0) 40))))
-          ((= (file-position s) length) oid)
-        ;; collect until <= 127
-        (do ((num 0)
-             (done nil))
-            (done (setf oid (append oid (list num))))
-          (let ((b (read-byte s)))
-            (cond
-              ((<= b 127)
-               (setf num (logior (ash num 7) b)
-                     done t))
-              (t
-               (setf num (logior (ash num 7)
-                                 (logand b #x7f))))))))))))
+        (do ((oid (list (truncate (aref bytes 0) 40) (mod (aref bytes 0) 40))))
+            ((= (file-position s) length) oid)
+          ;; collect until <= 127
+          (do ((num 0)
+               (done nil))
+              (done (setf oid (append oid (list num))))
+            (let ((b (read-byte s)))
+              (cond
+                ((<= b 127)
+                 (setf num (logior (ash num 7) b)
+                       done t))
+                (t
+                 (setf num (logior (ash num 7)
+                                   (logand b #x7f))))))))))))
 
 ;; ----------------------------
 
@@ -388,23 +388,23 @@
                                            (destructuring-bind (s-name s-type &key tag optional) slot
                                              `(flet ((enc (stream v)
                                                        ,@(cond
-                                                          ((symbolp s-type)
-                                                           `((,(encoder-name s-type) stream v)))
-                                                          ((eq (car s-type) :integer)
-                                                           `((encode-integer stream v)))
-                                                          ((eq (car s-type) :sequence-of)
-                                                           `((encode-sequence-of stream
-                                                                                #',(encoder-name (cadr s-type))
-                                                                                v))))))
+                                                           ((symbolp s-type)
+                                                            `((,(encoder-name s-type) stream v)))
+                                                           ((eq (car s-type) :integer)
+                                                            `((encode-integer stream v)))
+                                                           ((eq (car s-type) :sequence-of)
+                                                            `((encode-sequence-of stream
+                                                                                  #',(encoder-name (cadr s-type))
+                                                                                  v))))))
                                                 ,(cond
-                                                  (tag
-                                                   `(let ((v (,(accessor-name name s-name) value)))
-                                                      (when ,(if optional 'v 't)
-                                                        (encode-tagged-type s #'enc v
-                                                                            :class :context
-                                                                            :tag ,tag))))
-                                                  (t
-                                                   `(enc s (,(accessor-name name s-name) value)))))))
+                                                   (tag
+                                                    `(let ((v (,(accessor-name name s-name) value)))
+                                                       (when ,(if optional 'v 't)
+                                                         (encode-tagged-type s #'enc v
+                                                                             :class :context
+                                                                             :tag ,tag))))
+                                                   (t
+                                                    `(enc s (,(accessor-name name s-name) value)))))))
                                          slots))))
                   (encode-identifier stream 16 :primitive nil)
                   (encode-length stream (length bytes))
@@ -433,29 +433,29 @@
                                                 `(,tag
                                                   (flet ((dec (stream)
                                                            ,@(cond
-                                                              ((symbolp s-type)
-                                                               `((,(decoder-name s-type) stream)))
-                                                              ((eq (car s-type) :integer)
-                                                               `((decode-integer stream)))
-                                                              ((eq (car s-type) :sequence-of)
-                                                               `((decode-sequence-of stream
-                                                                                     #',(decoder-name (cadr s-type))))))))
+                                                               ((symbolp s-type)
+                                                                `((,(decoder-name s-type) stream)))
+                                                               ((eq (car s-type) :integer)
+                                                                `((decode-integer stream)))
+                                                               ((eq (car s-type) :sequence-of)
+                                                                `((decode-sequence-of stream
+                                                                                      #',(decoder-name (cadr s-type))))))))
                                                     (setf (,(accessor-name name s-name) value)
                                                           (dec stream))))))
-                                            slots))))))
+                                     slots))))))
                        `(progn
                           (decode-length stream)
                           ,@(mapcar (lambda (slot)
                                       (destructuring-bind (s-name s-type) slot
                                         `(flet ((dec (stream)
                                                   ,@(cond
-                                                     ((symbolp s-type)
-                                                      `((,(decoder-name s-type) stream)))
-                                                     ((eq (car s-type) :integer)
-                                                      `((decode-integer stream)))
-                                                     ((eq (car s-type) :sequence-of)
-                                                      `((decode-sequence-of stream
-                                                                           #',(decoder-name (cadr s-type))))))))
+                                                      ((symbolp s-type)
+                                                       `((,(decoder-name s-type) stream)))
+                                                      ((eq (car s-type) :integer)
+                                                       `((decode-integer stream)))
+                                                      ((eq (car s-type) :sequence-of)
+                                                       `((decode-sequence-of stream
+                                                                             #',(decoder-name (cadr s-type))))))))
                                            (setf (,(accessor-name name s-name) value)
                                                  (dec stream)))))
                                     slots)))
@@ -550,4 +550,3 @@
             (t (warn "Not generating assignment for ~A" name))))
         (terpri stream))))
   nil)
-

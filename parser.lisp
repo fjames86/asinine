@@ -88,24 +88,24 @@
 (yacc:define-parser *asn1-parser*
   (:start-symbol module-definition)
   (:terminals (|::=| |,| |.| |{| |}| |(| |)| |..| |[| |]| pipe
-               integer boolean bit octet string any null
-               object identifier defaultsym
-               implicit explicit begin end definitions
-               sequence setsym of tags choicesym optional defined by
-               application universal private
-               name constant
-               size max))
+                     integer boolean bit octet string any null
+                     object identifier defaultsym
+                     implicit explicit begin end definitions
+                     sequence setsym of tags choicesym optional defined by
+                     application universal private
+                     name constant
+                     size max))
 
   (module-definition
    (name maybe-oid-list definitions |::=| begin module-body end
          (lambda (a b c d e f g) (declare (ignore c d e g))
-                 `(:module ,a ,f :oid ,b)))
+           `(:module ,a ,f :oid ,b)))
    (name maybe-oid-list definitions explicit tags |::=| begin module-body end
          (lambda (a b c d e f g h i) (declare (ignore c d e f g i))
-                 `(:module ,a ,h :oid ,b :explicit t)))
+           `(:module ,a ,h :oid ,b :explicit t)))
    (name maybe-oid-list definitions implicit tags |::=| begin module-body end
          (lambda (a b c d e f g h i) (declare (ignore c d e f g i))
-                 `(:module ,a ,h :oid ,b :implicit t))))
+           `(:module ,a ,h :oid ,b :implicit t))))
 
   (maybe-oid-list
    (|{| object-identifier-list |}|
@@ -124,13 +124,13 @@
    (name |::=| type (lambda (a b c) (declare (ignore b)) `(,a ,c)))
    (name object identifier |::=| |{| object-identifier-list |}|
          (lambda (a b c d e f g) (declare (ignore b c d e g))
-                 `(,a (:object-identifier ,f))))
+           `(,a (:object-identifier ,f))))
    (name name |::=| |{| object-identifier-list |}|
          (lambda (a b c d e f) (declare (ignore c d f))
-                 `(,a (:object-identifier-alias ,b ,e))))
+           `(,a (:object-identifier-alias ,b ,e))))
    (name integer |::=| constant
          (lambda (a b c d) (declare (ignore b c))
-                 `(,a (:integer ,d)))))
+           `(,a (:integer ,d)))))
 
   (type
    external-type
@@ -146,11 +146,11 @@
    tagged-type)
 
   (defined-type
-    name
-    (name |(| name |)| (lambda (a b c d) (declare (ignore b c d)) a))
+      name
+      (name |(| name |)| (lambda (a b c d) (declare (ignore b c d)) a))
     (name |(| bit-string-option-list |)|
           (lambda (a b c d) (declare (ignore b c d))
-                  a)))
+            a)))
 
   (primitive-type
    integer-expr
@@ -179,12 +179,12 @@
             (lambda (a b c d e f) (declare (ignore a b d f)) `(:integer :range :start ,c :end ,e)))
    (integer |(| constant |..| name |)|
             (lambda (a b c d e f) (declare (ignore a b d f))
-                    `(:integer :range :start ,c :end ,e)))
+              `(:integer :range :start ,c :end ,e)))
    (integer |(| constant-list |)| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c)))
    (integer |{| named-number-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:integer :member ,c)))
    (integer |{| named-number-list |}| |(| constant |..| name |)|
             (lambda (a b c d e f g h i) (declare (ignore a b d e g i))
-                    `(:integer :member ,c :start ,f :end ,h))))
+              `(:integer :member ,c :start ,f :end ,h))))
 
   (constant-list
    (constant (lambda (a) (list a)))
@@ -194,7 +194,7 @@
    (constant |..| constant (lambda (a b c) (declare (ignore b)) `(:range :start ,a :end ,c)))
    (constant |..| max (lambda (a b c) (declare (ignore b c)) `(:range :start ,a :end nil)))
    (constant |..| name (lambda (a b c) (declare (ignore b))
-                               `(:range :start ,a :end ,c)))
+                         `(:range :start ,a :end ,c)))
    (constant (lambda (a) `(:integer :member (,a))))
    (name (lambda (a) `(:integer :member (,a)))))
 
@@ -229,7 +229,7 @@
    (sequence of type (lambda (a b c) (declare (ignore a b)) `(:sequence-of ,c)))
    (sequence bit-string-option of type
              (lambda (a b c d) (declare (ignore a c))
-                     `(:sequence-of ,d :size ,b))))
+               `(:sequence-of ,d :size ,b))))
 
   (set
    (setsym |{| element-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:set ,c)))
@@ -239,7 +239,7 @@
    (setsym of type (lambda (a b c) (declare (ignore a b)) `(:set-of ,c)))
    (setsym bit-string-option-list of type
            (lambda (a b c d) (declare (ignore a c))
-                   `(:set-of ,d :options ,b))))
+             `(:set-of ,d :options ,b))))
 
   (choice
    (choicesym |{| alternative-type-list |}| (lambda (a b c d) (declare (ignore a b d)) `(:choice ,c))))
@@ -283,20 +283,20 @@
    (named-type defaultsym value (lambda (a b c) (declare (ignore b)) (append a `(:default ,c))))
    (named-type defined by name
                (lambda (a b c d) (declare (ignore b c))
-                       (append a `(:defined-by ,d))))
+                 (append a `(:defined-by ,d))))
    (named-type defined by name optional
                (lambda (a b c d e) (declare (ignore b c e))
-                       (append a `(:defined-by ,d :optional t)))))
+                 (append a `(:defined-by ,d :optional t)))))
 
   (named-type
    (name type)
    (name |[| constant |]| type (lambda (a b c d e) (declare (ignore b d)) `(,a ,e :tag ,c)))
    (name |[| constant |]| implicit type
          (lambda (a b c d e f) (declare (ignore b d e))
-                 `(,a ,f :tag ,c :implicit t)))
+           `(,a ,f :tag ,c :implicit t)))
    (name |[| constant |]| explicit type
          (lambda (a b c d e f) (declare (ignore b d e))
-                 `(,a ,f :tag ,c :explicit t)))
+           `(,a ,f :tag ,c :explicit t)))
    (type (lambda (a) `(nil ,a))))
 
   (alternative-type-list
@@ -311,12 +311,12 @@
 (defun parse-definition (pathspec)
   "Parse the ASN.1 specification stored in the file named by PATHSPEC. Returns the parsed definition."
   (let ((body
-         (with-open-file (f pathspec :direction :input)
-           (with-output-to-string (s)
-             (do ((l (read-line f nil nil) (read-line f nil nil)))
-                 ((null l))
-               (princ l s)
-               (fresh-line s))))))
+            (with-open-file (f pathspec :direction :input)
+              (with-output-to-string (s)
+                (do ((l (read-line f nil nil) (read-line f nil nil)))
+                    ((null l))
+                  (princ l s)
+                  (fresh-line s))))))
     (let ((asn1 (test-parser body)))
       asn1)))
 
@@ -335,5 +335,3 @@ Returns the parsed contents."
       (let ((asn1 (parse-definition pathspec)))
         (asinine:gen asn1 f)
         asn1))))
-
-
