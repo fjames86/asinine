@@ -61,7 +61,7 @@ id-ad-caRepository OBJECT IDENTIFIER ::= { id-ad 5 }
 
 Attribute               ::= SEQUENCE {
       type             AttributeType,
-      values    SET OF AttributeValue 
+      values    SET OF AttributeValue
 }
             -- at least one value is required
 
@@ -102,7 +102,7 @@ X520name ::= CHOICE {
       printableString   PrintableString (SIZE (1..ub-name)),
       universalString   UniversalString (SIZE (1..ub-name)),
       utf8String        UTF8String      (SIZE (1..ub-name)),
-      bmpString         BMPString       (SIZE (1..ub-name)) 
+      bmpString         BMPString       (SIZE (1..ub-name))
 }
 
 -- Naming attributes of type X520CommonName
@@ -135,7 +135,7 @@ X520LocalityName ::= CHOICE {
       printableString   PrintableString (SIZE (1..ub-locality-name)),
       universalString   UniversalString (SIZE (1..ub-locality-name)),
       utf8String        UTF8String      (SIZE (1..ub-locality-name)),
-      bmpString         BMPString       (SIZE (1..ub-locality-name)) 
+      bmpString         BMPString       (SIZE (1..ub-locality-name))
 }
 
 -- Naming attributes of type X520StateOrProvinceName
@@ -605,7 +605,7 @@ TerminalType ::= INTEGER {
    g3-facsimile (5),
    g4-facsimile (6),
    ia5-terminal (7),
-   videotex     (8) } (0..ub-integer-options) 
+   videotex     (8) } (0..ub-integer-options)
 
 -- Extension Domain-defined Attributes
 
