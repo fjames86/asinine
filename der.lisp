@@ -546,6 +546,19 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
 (defun getter-name (choice-name slot-name)
   (alexandria:symbolicate 'get- choice-name '- slot-name))
 
+
+(defun generate-choice-encoder (name class tag alternatives)
+  `(defun ,(encoder-name name) (stream choice) (encode-choice ',alternatives stream choice)))
+
+(defun generate-choice-decoder (name class tag alternatives)
+  `(defun ,(decoder-name name) (stream)
+
+
+     (decode-choice ',alternatives stream)
+
+     ))
+
+
 (defmacro defchoice (name (&optional class tag) &rest alternatives)
   (unless (valid-alternatives-p alternatives)
     (error "Duplicate choices in the alternatives for ~A:~%~{   ~S~%~}" name alternatives))
@@ -556,10 +569,10 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                    (let ((alternative-keyword (alexandria:make-keyword (cadr alternative)))
                          (reader              (accessor-name name (car alternative))))
                      `(
-                       ;; alternative constructor: eg. (make-object-integer 42)
+                       ;; public constructor for alternative: (make-object-integer 42)
                        (defun ,(constructor-name name (car alternative)) (value)
                          (,%constructor ',alternative-keyword value))
-                       ;; alternative reader: (object-integer choice) -> 42 or error.
+                       ;; public reader for alternative: (object-integer choice) -> 42 or error.
                        (defun ,reader (choice)
                          (assert (eq ',alternative-keyword (,(accessor-name name '%alternative) choice))
                                  (choice)
@@ -567,16 +580,97 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                                  (,(accessor-name name '%alternative) choice)
                                  ',alternative-keyword ',reader)
                          (,(accessor-name name '%value) choice))
-                       ;; alternative writer: (setf (object-integer choice) 42) ; updates the %alternative too.
+                       ;; public writer for alternative: (setf (object-integer choice) 42) ; updates the %alternative too.
                        (defun (setf ,reader) (new-value choice)
                          (setf (,(accessor-name name '%alternative) choice) ',alternative-keyword
                                (,(accessor-name name '%value)       choice) new-value))
                        )))
                  alternatives)
+       ;; public readers for low level slots:
        (defun ,(getter-name name 'alternative) (choice) (,(accessor-name name '%alternative) choice))
        (defun ,(getter-name name 'value)       (choice) (,(accessor-name name '%value)       choice))
-       (defun ,(encoder-name name) (stream choice) (encode-choice ',alternatives stream choice))
-       (defun ,(decoder-name name) (stream)        (decode-choice ',alternatives stream)))))
+       ;; DER encoding/decoding:
+       (defun ,(encoder-name name) (stream choice)
+         (check-type stream stream)
+         (check-type choice ,name)
+         (locally (declare (type ,name choice)
+                           (type stream stream))
+           (flet ((enc (stream)
+                    (case (,(accessor-name name '%alternative) choice)
+                      ,@(mapcar (lambda (alternative)
+                                  (destructuring-bind (s-name s-type &key tag) alternative
+                                    `((,(alexandria:make-keyword s-type))
+                                      (flet ((enc (stream v)
+                                               ,@(cond
+                                                   ((symbolp s-type)
+                                                    `((,(encoder-name s-type) stream v)))
+                                                   ((eq (car s-type) :integer)
+                                                    `((encode-integer stream v)))
+                                                   ((eq (car s-type) :sequence-of)
+                                                    `((encode-sequence-of stream
+                                                                          #',(encoder-name (cadr s-type))
+                                                                          v))))))
+                                        ,(if tag
+                                             `(encode-tagged-type stream #'enc
+                                                                  (,(accessor-name name '%value) choice)
+                                                                  :class :context
+                                                                  :tag ,tag)
+                                             `(enc stream (,(accessor-name name '%value) choice)))))))
+                         alternatives))))
+             ,(if (and class tag)
+                  `(encode-tagged-type stream #'enc (,(accessor-name name '%value) choice)
+                                       :class ,class :tag ,tag)
+                  `(enc stream)))))
+       (defun ,(decoder-name name) (stream)
+         (declare (type stream stream))
+         (flet ((dec (stream)
+                  (decode-identifier stream)
+                  (let ((value (,(alexandria:symbolicate 'make- name))))
+                    ,(if (some (lambda (alternative) (find :tag alternative)) alternatives)
+                         `(let ((v (nibbles:make-octet-vector (decode-length stream))))
+                            (read-sequence v stream)
+                            (flexi-streams:with-input-from-sequence (stream v)
+                              (do ()
+                                  ((not (listen stream)))
+                                (let ((tag (decode-identifier stream)))
+                                  (decode-length stream)
+                                  (ecase tag
+                                    ,@(mapcar (lambda (slot)
+                                                (destructuring-bind (s-name s-type &key tag optional) slot
+                                                  (declare (ignore optional))
+                                                  `(,tag
+                                                    (flet ((dec (stream)
+                                                             ,@(cond
+                                                                 ((symbolp s-type)
+                                                                  `((,(decoder-name s-type) stream)))
+                                                                 ((eq (car s-type) :integer)
+                                                                  `((decode-integer stream)))
+                                                                 ((eq (car s-type) :sequence-of)
+                                                                  `((decode-sequence-of stream
+                                                                                        #',(decoder-name (cadr s-type))))))))
+                                                      (setf (,(accessor-name name s-name) value)
+                                                            (dec stream))))))
+                                       alternatives))))))
+                         `(progn
+                            (decode-length stream)
+                            ,@(mapcar (lambda (slot)
+                                        (destructuring-bind (s-name s-type) slot
+                                          `(flet ((dec (stream)
+                                                    ,@(cond
+                                                        ((symbolp s-type)
+                                                         `((,(decoder-name s-type) stream)))
+                                                        ((eq (car s-type) :integer)
+                                                         `((decode-integer stream)))
+                                                        ((eq (car s-type) :sequence-of)
+                                                         `((decode-sequence-of stream
+                                                                               #',(decoder-name (cadr s-type))))))))
+                                             (setf (,(accessor-name name s-name) value)
+                                                   (dec stream)))))
+                                      alternatives)))
+                    value)))
+           ,(if (and class tag)
+                `(decode-tagged-type stream #'dec)
+                `(dec stream)))))))
 
 
 ;; -----------------------------------
