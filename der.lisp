@@ -467,6 +467,120 @@
 
 ;; -----------------------------------
 
+;; In CHOICE each alternative must have a different type, or a different tag.
+;; The encoding is merely the value of the alternative.
+;; We define a structure to represent a CHOICE with an identified named alternative.
+;; The alternative name is converted to a KEYWORD.
+;; We generate an accessor for each alternative: the writer sets the alternative, the reader checks it.
+;;
+;;
+;; (defchoice object ()
+;;   (null     null)
+;;   (integer  integer)
+;;   (data     octet-stream))
+;; -->
+;; (defstruct object
+;;   (%alternative nil :type (member nil :null :integer :data))
+;;   (%value))
+;;
+;; (defun make-null-object    (value))
+;; (defun make-integer-object (value))
+;; (defun make-data-object    (value))
+;;
+;; (defun get-object-alternative  (object)) ; we use the get- prefix to avoid collision with CHOICE alternatives.
+;; (defun get-object-value        (object))
+;;
+;; (defun object-null    (object))
+;; (defun object-integer (object))
+;; (defun object-data    (object))
+;;
+;; (defun (setf object-null)    (new-value object))
+;; (defun (setf object-integer) (new-value object))
+;; (defun (setf object-data)    (new-value object))
+;;
+;;
+;; Unfortunately:
+;;
+;; - asinine doesn't keep around type definitions for ASN.1 types,
+;;   (they're immediately translated into encoder/decoder functions),
+;;   so we cannot check that the alternative have different type tags:
+;;   we can only test for different type names.
+;;
+;; - in general, we don't know for a given type a (valid) prototype
+;;   value.  Therefore we cannot initialize a structure with default
+;;   values: we have to let the slots initialized to NIL.  And we
+;;   don't have a map of ASN.1 types to lisp types, so we cannot type
+;;   the slots either.
+;;
+;; So:
+;; -->
+;; (defstruct object
+;;   %alternative
+;;   %value)
+
+
+;; (:choice ((null null :tag 0)
+;;           (asinine::primitive :octet-string :tag 1)
+;;           (cons asinine::bsx-cons :tag 2))))
+
+
+(defun valid-alternatives-p (alternatives)
+  "Validate the alternatives of a CHOICE
+Either we have tags, and they must be unique, or we don't have tags, and the type names must be unique."
+  (cond
+    ((every (lambda (alternative) (let ((tag (getf (cddr alternative) :tag))) (and (integerp tag) (<= 0 tag))))
+            alternatives)
+     (= (length (delete-duplicates (mapcar (lambda (alternative) (getf (cddr alternative) :tag)) alternatives)
+                                   :test (function =)))
+        (length alternatives)))
+    ((notany (lambda (alternative) (getf (cddr alternative) :tag)) alternatives)
+     (= (length (delete-duplicates (mapcar (function cadr) alternatives)))
+        (length alternatives)))))
+
+(defun %constructor-name (name)
+  (alexandria:symbolicate '%make- name))
+
+(defun constructor-name (choice-name alternative-name)
+  (alexandria:symbolicate 'make- alternative-name '- choice-name))
+
+(defun getter-name (choice-name slot-name)
+  (alexandria:symbolicate 'get- choice-name '- slot-name))
+
+(defmacro defchoice (name (&optional class tag) &rest alternatives)
+  (unless (valid-alternatives-p alternatives)
+    (error "Duplicate choices in the alternatives for ~A:~%~{   ~S~%~}" name alternatives))
+  (let ((%constructor (%constructor-name name)))
+    `(progn
+       (defstruct (,name (:constructor ,%constructor (%alternative %value))) %alternative %value)
+       ,@(mapcan (lambda (alternative)
+                   (let ((alternative-keyword (alexandria:make-keyword (cadr alternative)))
+                         (reader              (accessor-name name (car alternative))))
+                     `(
+                       ;; alternative constructor: eg. (make-object-integer 42)
+                       (defun ,(constructor-name name (car alternative)) (value)
+                         (,%constructor ',alternative-keyword value))
+                       ;; alternative reader: (object-integer choice) -> 42 or error.
+                       (defun ,reader (choice)
+                         (assert (eq ',alternative-keyword (,(accessor-name name '%alternative) choice))
+                                 (choice)
+                                 "Current alternative of CHOICE is ~S, not ~S, cannot apply ~S"
+                                 (,(accessor-name name '%alternative) choice)
+                                 ',alternative-keyword ',reader)
+                         (,(accessor-name name '%value) choice))
+                       ;; alternative writer: (setf (object-integer choice) 42) ; updates the %alternative too.
+                       (defun (setf ,reader) (new-value choice)
+                         (setf (,(accessor-name name '%alternative) choice) ',alternative-keyword
+                               (,(accessor-name name '%value)       choice) new-value))
+                       )))
+                 alternatives)
+       (defun ,(getter-name name 'alternative) (choice) (,(accessor-name name '%alternative) choice))
+       (defun ,(getter-name name 'value)       (choice) (,(accessor-name name '%value)       choice))
+       (defun ,(encoder-name name) (stream choice) (encode-choice ',alternatives stream choice))
+       (defun ,(decoder-name name) (stream)        (decode-choice ',alternatives stream)))))
+
+
+;; -----------------------------------
+
 (defun gen (asn1 &optional (stream *standard-output*))
   (destructuring-bind (module-name assignments &key explicit implicit oid) (cdr asn1)
     (declare (ignore explicit implicit))
@@ -495,58 +609,64 @@
              (pprint `(defun ,(decoder-name name) (stream)
                         (,(decoder-name type-form) stream))
                      stream))
-            ((eq (car type-form) :integer)
-             (pprint `(defun ,(encoder-name name) (stream value)
-                        (encode-integer stream value))
-                     stream)
-             (pprint `(defun ,(decoder-name name) (stream)
-                        (decode-integer stream))
-                     stream))
-            ((eq (car type-form) :bit-string)
-             (pprint `(defun ,(encoder-name name) (stream value)
-                        (encode-bit-string stream value))
-                     stream)
-             (pprint `(defun ,(decoder-name name) (stream)
-                        (decode-bit-string stream))
-                     stream))
-            ((eq (car type-form) :octet-string)
-             (pprint `(defun ,(encoder-name name) (stream value)
-                        (encode-octet-string stream value))
-                     stream)
-             (pprint `(defun ,(decoder-name name) (stream)
-                        (decode-octet-string stream))
-                     stream))
-            ((eq (car type-form) :sequence-of)
-             (let ((type-form (cadr type-form)))
-               (unless (symbolp type-form)
-                 (error "assigment ~A sequence-of must be a symbol" name))
-               (pprint `(defun ,(encoder-name name) (stream value)
-                          (encode-sequence-of stream #',(encoder-name type-form) value))
-                       stream)
-               (pprint `(defun ,(decoder-name name) (stream)
-                          (decode-sequence-of stream #',(decoder-name type-form)))
-                       stream)))
-            ((eq (car type-form) :sequence)
-             (pprint `(defsequence ,name () ,@(cadr type-form)) stream))
-            ((eq (car type-form) :tagged-type)
-             (destructuring-bind ((class tag) real-type &key &allow-other-keys) (cdr type-form)
-               (cond
-                 ((symbolp real-type)
+            ((consp type-form)
+             (case (car type-form)
+               ((:integer)
+                (pprint `(defun ,(encoder-name name) (stream value)
+                           (encode-integer stream value))
+                        stream)
+                (pprint `(defun ,(decoder-name name) (stream)
+                           (decode-integer stream))
+                        stream))
+               ((:bit-string)
+                (pprint `(defun ,(encoder-name name) (stream value)
+                                   (encode-bit-string stream value))
+                                stream)
+                (pprint `(defun ,(decoder-name name) (stream)
+                           (decode-bit-string stream))
+                        stream))
+               ((:octet-string)
+                (pprint `(defun ,(encoder-name name) (stream value)
+                           (encode-octet-string stream value))
+                        stream)
+                (pprint `(defun ,(decoder-name name) (stream)
+                           (decode-octet-string stream))
+                        stream))
+               ((:sequence-of)
+                (let ((type-form (cadr type-form)))
+                  (unless (symbolp type-form)
+                    (error "assigment ~A sequence-of must be a symbol" name))
                   (pprint `(defun ,(encoder-name name) (stream value)
-                             (encode-tagged-type stream #',(encoder-name real-type) value
-                                                 :class ,class :tag ,tag))
+                             (encode-sequence-of stream #',(encoder-name type-form) value))
                           stream)
                   (pprint `(defun ,(decoder-name name) (stream)
-                             (decode-tagged-type stream #',(decoder-name real-type)))
-                          stream))
-                 ((eq (car real-type) :sequence)
-                  (pprint `(defsequence ,name (,class ,tag) ,@(cadr real-type))
-                          stream)))))
-            ((eq (car type-form) :object-identifier)
-             (let ((named-ints (cadr type-form)))
-               (pprint `(defparameter ,(alexandria:symbolicate '* name '-oid*)
-                          (list ,@(mapcar #'third named-ints)))
-                       stream)))
+                             (decode-sequence-of stream #',(decoder-name type-form)))
+                          stream)))
+               ((:sequence)
+                (pprint `(defsequence ,name () ,@(cadr type-form)) stream))
+               ((:choice)
+                (pprint `(defchoice ,name () ,@(cadr type-form)) stream))
+               ((:tagged-type)
+                (destructuring-bind ((class tag) real-type &key &allow-other-keys) (cdr type-form)
+                  (cond
+                    ((symbolp real-type)
+                     (pprint `(defun ,(encoder-name name) (stream value)
+                                (encode-tagged-type stream #',(encoder-name real-type) value
+                                                    :class ,class :tag ,tag))
+                             stream)
+                     (pprint `(defun ,(decoder-name name) (stream)
+                                (decode-tagged-type stream #',(decoder-name real-type)))
+                             stream))
+                    ((eq (car real-type) :sequence)
+                     (pprint `(defsequence ,name (,class ,tag) ,@(cadr real-type))
+                             stream)))))
+               ((:object-identifier)
+                (let ((named-ints (cadr type-form)))
+                  (pprint `(defparameter ,(alexandria:symbolicate '* name '-oid*)
+                             (list ,@(mapcar #'third named-ints)))
+                          stream)))
+               (otherwise
+                (warn "Not generating assignment for ~A" name))))
             (t (warn "Not generating assignment for ~A" name))))
         (terpri stream))))
   nil)

@@ -34,9 +34,5 @@
            #:encode-tagged-type
            #:decode-tagged-type
            #:defsequence
+           #:defchoice
            #:gen))
-
-
-
-
-
