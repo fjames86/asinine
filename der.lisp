@@ -1,4 +1,5 @@
 ;;;; Copyright (c) Frank James 2015 <frank.a.james@gmail.com>
+;;;; CHOICE implementation: Copyright (c) Pascal J. Bourguignon 2016 <pjb@informatimago.com>
 ;;;; This code is licensed under the MIT license.
 
 (in-package #:asinine)
@@ -462,7 +463,8 @@
                   value)))
          ,(if (and class tag)
               `(decode-tagged-type stream #'dec)
-              `(dec stream))))))
+              `(dec stream))))
+     ',name))
 
 
 ;; -----------------------------------
@@ -499,29 +501,71 @@
 ;; (defun (setf object-data)    (new-value object))
 ;;
 ;;
-;; Unfortunately:
-;;
-;; - asinine doesn't keep around type definitions for ASN.1 types,
-;;   (they're immediately translated into encoder/decoder functions),
-;;   so we cannot check that the alternative have different type tags:
-;;   we can only test for different type names.
-;;
-;; - in general, we don't know for a given type a (valid) prototype
-;;   value.  Therefore we cannot initialize a structure with default
-;;   values: we have to let the slots initialized to NIL.  And we
-;;   don't have a map of ASN.1 types to lisp types, so we cannot type
-;;   the slots either.
+;; In general, we don't know for a given type a (valid) prototype
+;; value.  Therefore we cannot initialize a structure with default
+;; values: we have to let the slots initialized to NIL.  And we
+;; don't have a map of ASN.1 types to lisp types, so we cannot type
+;; the slots either.
 ;;
 ;; So:
 ;; -->
 ;; (defstruct object
 ;;   %alternative
 ;;   %value)
-
-
-;; (:choice ((null null :tag 0)
-;;           (asinine::primitive :octet-string :tag 1)
-;;           (cons asinine::bsx-cons :tag 2))))
+;;
+;; Regarding the encoding/decoding of CHOICE:
+;;
+;; * CHOICE with explicit tags generates contextual tag prefixes before
+;;   the actual alternative data:
+;;
+;;     BSX { bsx(31337) } DEFINITIONS ::= BEGIN
+;;     BsxPDU ::= SEQUENCE {
+;;         version INTEGER(0..127),
+;;         object BsxObject
+;;     }
+;;     BsxCons ::= SEQUENCE {
+;;         head BsxObject,
+;;         tail BsxObject
+;;     }
+;;     BsxObject ::= CHOICE {
+;;         null      [0] NULL,
+;;         primitive [1] OCTET STRING,
+;;         cons      [2] BsxCons
+;;     }
+;;     END
+;;
+;;     (0 :-> bsx-object null null)
+;;     (1 :-> bsx-object primitive :octet-string)
+;;     (2 :-> bsx-object cons bsx-cons)
+;;     30 1D 02 01 01 A2 18 30 16 A1 05 04 03 01 02 03 A2 0D 30 0B A1 05 04 03 04 05 06 A0 02 05 00
+;;
+;;
+;; * CHOICE with implicit tags requires that each alternative has a
+;;   distinct tag.  For this we need to keep all the type definitions
+;;   specified (*TYPE* hashtable), so we may retrieve them and use their
+;;   specific tags.  In this case, the alternatives can be generated in
+;;   place of the CHOICE without overhead.
+;;
+;;     BSX { bsx(31337) } DEFINITIONS ::= BEGIN
+;;     BsxPDU ::= SEQUENCE {
+;;         version INTEGER(0..127),
+;;         object BsxObject
+;;     }
+;;     BsxCons ::= SEQUENCE {
+;;         head BsxObject,
+;;         tail BsxObject
+;;     }
+;;     BsxObject ::= CHOICE {
+;;         null       NULL,
+;;         primitive  OCTET STRING,
+;;         cons       BsxCons
+;;     }
+;;     END
+;;
+;;     (5 :-> bsx-object null null)
+;;     (4 :-> bsx-object primitive :octet-string)
+;;     (16 :-> bsx-object cons bsx-cons)
+;;     30 13 02 01 01 30 0E 04 03 01 02 03 30 07 04 03 04 05 06 05 00
 
 
 (defun valid-alternatives-p (alternatives)
@@ -545,19 +589,6 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
 
 (defun getter-name (choice-name slot-name)
   (alexandria:symbolicate 'get- choice-name '- slot-name))
-
-
-(defun generate-choice-encoder (name class tag alternatives)
-  `(defun ,(encoder-name name) (stream choice) (encode-choice ',alternatives stream choice)))
-
-(defun generate-choice-decoder (name class tag alternatives)
-  `(defun ,(decoder-name name) (stream)
-
-
-     (decode-choice ',alternatives stream)
-
-     ))
-
 
 (defmacro defchoice (name (&optional class tag) &rest alternatives)
   (unless (valid-alternatives-p alternatives)
@@ -589,7 +620,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
        ;; public readers for low level slots:
        (defun ,(getter-name name 'alternative) (choice) (,(accessor-name name '%alternative) choice))
        (defun ,(getter-name name 'value)       (choice) (,(accessor-name name '%value)       choice))
-       ;; DER encoding/decoding:
+       ;; DER encoding:
        (defun ,(encoder-name name) (stream choice)
          (check-type stream stream)
          (check-type choice ,name)
@@ -621,66 +652,115 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                   `(encode-tagged-type stream #'enc (,(accessor-name name '%value) choice)
                                        :class ,class :tag ,tag)
                   `(enc stream)))))
+       ;; DER decoding:
        (defun ,(decoder-name name) (stream)
-         (declare (type stream stream))
-         (flet ((dec (stream)
-                  (decode-identifier stream)
-                  (let ((value (,(alexandria:symbolicate 'make- name))))
-                    ,(if (some (lambda (alternative) (find :tag alternative)) alternatives)
-                         `(let ((v (nibbles:make-octet-vector (decode-length stream))))
-                            (read-sequence v stream)
-                            (flexi-streams:with-input-from-sequence (stream v)
-                              (do ()
-                                  ((not (listen stream)))
-                                (let ((tag (decode-identifier stream)))
-                                  (decode-length stream)
+         (check-type stream stream)
+         (locally (declare (type stream stream))
+           (flet ((dec (stream)
+                    ,(let* ((tagged-alternatives
+                              (some (lambda (alternative) (getf (cddr alternative) :tag)) alternatives))
+                            (gen-alternative-clause
+                              (flet ((gen-alternative-decoder (name s-name s-type tag)
+                                       (print (list tag :-> name s-name s-type))
+                                       `(,tag
+                                         (flet ((dec (stream)
+                                                  ,@(cond
+                                                      ((symbolp s-type)
+                                                       `((,(decoder-name s-type) stream)))
+                                                      ((eq (car s-type) :integer)
+                                                       `((decode-integer stream)))
+                                                      ((eq (car s-type) :sequence-of)
+                                                       `((decode-sequence-of stream #',(decoder-name (cadr s-type))))))))
+                                           (setf (,(accessor-name name s-name) choice) (dec stream))))))
+                                (if tagged-alternatives
+                                    (lambda (alternative)
+                                      (destructuring-bind (s-name s-type &key tag) alternative
+                                        (unless tag (error "Alternative ~S is missing ~S" alternative ':tag))
+                                        (gen-alternative-decoder name s-name s-type tag)))
+                                    (lambda (alternative)
+                                      (destructuring-bind (s-name s-type) alternative
+                                        ;; Note: We generate a *TYPE* and a GET-TYPE-FORM in each ASN.1 definition package.
+                                        ;;       It should be the current package when defchoice is read and macroexpanded.
+                                        ;;       Therefore we use (intern "GET-TYPE-FORM") to refer to the wanted function
+                                        ;;       and *TYPE* table.
+                                        (gen-alternative-decoder name s-name s-type (tag (cadr alternative)
+                                                                                         (intern "GET-TYPE-FORM")))))))))
+                       (if tagged-alternatives
+                           `(let ((choice (,(%constructor-name name) nil nil))
+                                  (tag    (decode-identifier stream)))
+                              (decode-length stream)
+                              (ecase tag
+                                ,@(mapcar gen-alternative-clause alternatives))
+                              choice)
+                           `(let ((choice (,(%constructor-name name) nil nil))
+                                  (tag    (decode-identifier stream)))
+                              (flexi-streams:with-input-from-sequence (tag-stream (vector tag))
+                                (let ((stream (make-concatenated-stream tag-stream stream)))
                                   (ecase tag
-                                    ,@(mapcar (lambda (slot)
-                                                (destructuring-bind (s-name s-type &key tag optional) slot
-                                                  (declare (ignore optional))
-                                                  `(,tag
-                                                    (flet ((dec (stream)
-                                                             ,@(cond
-                                                                 ((symbolp s-type)
-                                                                  `((,(decoder-name s-type) stream)))
-                                                                 ((eq (car s-type) :integer)
-                                                                  `((decode-integer stream)))
-                                                                 ((eq (car s-type) :sequence-of)
-                                                                  `((decode-sequence-of stream
-                                                                                        #',(decoder-name (cadr s-type))))))))
-                                                      (setf (,(accessor-name name s-name) value)
-                                                            (dec stream))))))
-                                       alternatives))))))
-                         `(progn
-                            (decode-length stream)
-                            ,@(mapcar (lambda (slot)
-                                        (destructuring-bind (s-name s-type) slot
-                                          `(flet ((dec (stream)
-                                                    ,@(cond
-                                                        ((symbolp s-type)
-                                                         `((,(decoder-name s-type) stream)))
-                                                        ((eq (car s-type) :integer)
-                                                         `((decode-integer stream)))
-                                                        ((eq (car s-type) :sequence-of)
-                                                         `((decode-sequence-of stream
-                                                                               #',(decoder-name (cadr s-type))))))))
-                                             (setf (,(accessor-name name s-name) value)
-                                                   (dec stream)))))
-                                      alternatives)))
-                    value)))
-           ,(if (and class tag)
-                `(decode-tagged-type stream #'dec)
-                `(dec stream)))))))
+                                    ,@(mapcar gen-alternative-clause alternatives))))
+                              choice)))))
+             ,(if (and class tag)
+                  `(decode-tagged-type stream #'dec)
+                  `(dec stream)))))
+       ',name)))
 
 
 ;; -----------------------------------
+
+(defun tag (type-form get-type-form)
+  (flet ((tag           (type-form) (tag type-form get-type-form))
+         (get-type-form (type-name) (funcall get-type-form type-form))
+         (primitive-tag (type-name)
+           (case type-name
+             ((:integer)                2)
+             ((:bit-string)             3)
+             ((:octet-string)           4)
+             ((:null null)              5) ; TODO: Why does the parser generate null instead of :null?
+             ((:object-identifier)      6)
+             ((:sequence :sequence-of) 16)
+             ((:set      :set-of)      17)
+             ((:printable-string)      19)
+             ((:t61-string)            20)
+             ((:ia5-string)            22)
+             ((:utc-time)              23)
+             ((:choice)                (mapcar (function tag) (cddr type-form)))
+             ((:tagged-type)           (destructuring-bind ((class tag) real-type &key &allow-other-keys) (cdr type-form)
+                                         tag)))))
+    (cond
+      ((null type-form)            (error "Invalid type form ~S" type-form))
+      ((symbolp type-form)         (or (primitive-tag type-form)
+                                       (tag (get-type-form type-form))))
+      ((consp type-form)           (or (primitive-tag (car type-form))
+                                       (error "Unexpected type ~S" type-form)))
+      (t                           (error "Invalid type form ~S" type-form)))))
+
+(defun generate-type-registrations (assignments vtype stream)
+  (terpri stream)
+  (write-string "(eval-when (:compile-toplevel :load-toplevel :execute)" stream)
+  (flet ((register-type (name type-form)
+           (print `(setf (gethash ',name ,vtype) ',type-form) stream)))
+    (dolist (assignment assignments)
+      (destructuring-bind (name type-form) assignment
+        (cond
+          ((symbolp type-form)
+           (register-type name type-form))
+          ((consp type-form)
+           (case (car type-form)
+             ((:integer :bit-string :octet-string :sequence :choice :tagged-type)
+              (register-type name type-form))
+             ((:sequence-of)
+              (let ((type-form (cadr type-form)))
+                (unless (symbolp type-form)
+                  (error "assigment ~A sequence-of must be a symbol" name)))
+              (register-type name type-form))))))))
+  (write-line ")" stream))
 
 (defun gen (asn1 &optional (stream *standard-output*))
   (destructuring-bind (module-name assignments &key explicit implicit oid) (cdr asn1)
     (declare (ignore explicit implicit))
     (let ((*print-case* :downcase))
       (pprint `(defpackage ,(string-upcase module-name)
-                 (:use #:cl #:asinine #:asinine))
+                 (:use #:cl #:asinine))
               stream)
       (terpri stream)
       (pprint `(in-package ,(string-upcase module-name))
@@ -690,6 +770,16 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
       ;; start by defining the oid
       (pprint `(defparameter ,(alexandria:symbolicate '* module-name '-oid*) (list ,@(mapcar #'third oid)))
               stream)
+      (terpri stream)
+
+      ;; generate the types description used to decode untagged choices.
+      (pprint `(defparameter *types* (make-hash-table))
+              stream)
+      (terpri stream)
+      (pprint `(defun get-type-form (name) (gethash name *types*))
+              stream)
+      (terpri stream)
+      (generate-type-registrations assignments '*types* stream)
       (terpri stream)
 
       ;; generate each assignment
