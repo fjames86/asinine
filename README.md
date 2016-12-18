@@ -41,7 +41,9 @@ The Kerberos V5 specifications is provided as an example.
 Should produce as file "krb5.lisp".
 
 ## 4. TODO
+
 [ ] Support sequences with mixtures of tagged and non-tagged elements
+
 [X] Support CHOICE types:
     Implemented by Pascal J. Bourguignon <pjb@informatimago.com>,
     financed by Alex Mizrahi <alex.mizrahi@gmail.com>.
