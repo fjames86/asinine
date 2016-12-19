@@ -1,10 +1,10 @@
 
 
-KerberosV5Spec2 
+KerberosV5Spec2
 {
         iso(1) identified-organization(3) dod(6) internet(1)
         security(5) kerberosV5(2) modules(4) krb5spec2(2)
-} 
+}
 DEFINITIONS EXPLICIT TAGS ::= BEGIN
 
 -- OID arc for KerberosV5
@@ -53,7 +53,7 @@ HostAddresses   -- NOTE: subtly different from rfc1510,
 
 -- NOTE: AuthorizationData is always used as an OPTIONAL field and
 -- should not be empty.
-AuthorizationDataList	::= SEQUENCE OF AuthorizationData
+AuthorizationDataList   ::= SEQUENCE OF AuthorizationData
 
 AuthorizationData       ::= SEQUENCE {
         ad-type         [0] Int32,
@@ -227,7 +227,7 @@ EncKDCRepPart   ::= SEQUENCE {
         caddr           [11] HostAddresses OPTIONAL
 }
 
-LastReqList 	::= 	SEQUENCE OF LastReq
+LastReqList     ::=     SEQUENCE OF LastReq
 
 LastReq         ::=     SEQUENCE {
         lr-type         [0] Int32,
@@ -355,7 +355,7 @@ METHOD-DATA     ::= SEQUENCE OF PA-DATA
 
 TYPED-DATA-LIST      ::= SEQUENCE SIZE (1..MAX) OF TYPED-DATA
 
-TYPED-DATA	     ::= SEQUENCE {
+TYPED-DATA           ::= SEQUENCE {
         data-type       [0] Int32,
         data-value      [1] OCTET STRING OPTIONAL
 }
