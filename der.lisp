@@ -397,6 +397,7 @@
                                                             `((encode-sequence-of stream
                                                                                   #',(encoder-name (cadr s-type))
                                                                                   v))))))
+                                                (declare (inline enc))
                                                 ,(cond
                                                    (tag
                                                     `(let ((v (,(accessor-name name s-name) value)))
@@ -441,6 +442,7 @@
                                                                ((eq (car s-type) :sequence-of)
                                                                 `((decode-sequence-of stream
                                                                                       #',(decoder-name (cadr s-type))))))))
+                                                    (declare (inline dec))
                                                     (setf (,(accessor-name name s-name) value)
                                                           (dec stream))))))
                                      slots))))))
@@ -457,6 +459,7 @@
                                                       ((eq (car s-type) :sequence-of)
                                                        `((decode-sequence-of stream
                                                                              #',(decoder-name (cadr s-type))))))))
+                                           (declare (inline dec))
                                            (setf (,(accessor-name name s-name) value)
                                                  (dec stream)))))
                                     slots)))
@@ -590,6 +593,11 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
 (defun getter-name (choice-name slot-name)
   (alexandria:symbolicate 'get- choice-name '- slot-name))
 
+(defun type-name (type-form)
+  (if (atom type-form)
+      type-form
+      (first type-form)))
+
 (defmacro defchoice (name (&optional class tag) &rest alternatives)
   (unless (valid-alternatives-p alternatives)
     (error "Duplicate choices in the alternatives for ~A:~%~{   ~S~%~}" name alternatives))
@@ -597,7 +605,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
     `(progn
        (defstruct (,name (:constructor ,%constructor (%alternative %value))) %alternative %value)
        ,@(mapcan (lambda (alternative)
-                   (let ((alternative-keyword (alexandria:make-keyword (cadr alternative)))
+                   (let ((alternative-keyword (alexandria:make-keyword (type-name (cadr alternative))))
                          (reader              (accessor-name name (car alternative))))
                      `(
                        ;; public constructor for alternative: (make-object-integer 42)
@@ -630,17 +638,20 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                     (case (,(accessor-name name '%alternative) choice)
                       ,@(mapcar (lambda (alternative)
                                   (destructuring-bind (s-name s-type &key tag) alternative
-                                    `((,(alexandria:make-keyword s-type))
+                                    `((,(alexandria:make-keyword (type-name s-type)))
                                       (flet ((enc (stream v)
                                                ,@(cond
                                                    ((symbolp s-type)
                                                     `((,(encoder-name s-type) stream v)))
                                                    ((eq (car s-type) :integer)
                                                     `((encode-integer stream v)))
+                                                   ((eq (car s-type) :bit-string)
+                                                    `((encode-bit-string stream v)))
                                                    ((eq (car s-type) :sequence-of)
                                                     `((encode-sequence-of stream
                                                                           #',(encoder-name (cadr s-type))
                                                                           v))))))
+                                        (declare (inline enc))
                                         ,(if tag
                                              `(encode-tagged-type stream #'enc
                                                                   (,(accessor-name name '%value) choice)
@@ -648,6 +659,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                                                                   :tag ,tag)
                                              `(enc stream (,(accessor-name name '%value) choice)))))))
                          alternatives))))
+             (declare (inline enc))
              ,(if (and class tag)
                   `(encode-tagged-type stream #'enc (,(accessor-name name '%value) choice)
                                        :class ,class :tag ,tag)
@@ -661,7 +673,6 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                               (some (lambda (alternative) (getf (cddr alternative) :tag)) alternatives))
                             (gen-alternative-clause
                               (flet ((gen-alternative-decoder (name s-name s-type tag)
-                                       (print (list tag :-> name s-name s-type))
                                        `(,tag
                                          (flet ((dec (stream)
                                                   ,@(cond
@@ -669,8 +680,11 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                                                        `((,(decoder-name s-type) stream)))
                                                       ((eq (car s-type) :integer)
                                                        `((decode-integer stream)))
+                                                      ((eq (car s-type) :bit-string)
+                                                       `((decode-bit-string stream)))
                                                       ((eq (car s-type) :sequence-of)
                                                        `((decode-sequence-of stream #',(decoder-name (cadr s-type))))))))
+                                           (declare (inline dec))
                                            (setf (,(accessor-name name s-name) choice) (dec stream))))))
                                 (if tagged-alternatives
                                     (lambda (alternative)
@@ -699,6 +713,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                                   (ecase tag
                                     ,@(mapcar gen-alternative-clause alternatives))))
                               choice)))))
+             (declare (inline dec))
              ,(if (and class tag)
                   `(decode-tagged-type stream #'dec)
                   `(dec stream)))))
@@ -722,15 +737,17 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
              ((:printable-string)      19)
              ((:t61-string)            20)
              ((:ia5-string)            22)
-             ((:utc-time)              23)
-             ((:choice)                (mapcar (function tag) (cddr type-form)))
-             ((:tagged-type)           (destructuring-bind ((class tag) real-type &key &allow-other-keys) (cdr type-form)
-                                         tag)))))
+             ((:utc-time)              23))))
     (cond
       ((null type-form)            (error "Invalid type form ~S" type-form))
       ((symbolp type-form)         (or (primitive-tag type-form)
                                        (tag (get-type-form type-form))))
       ((consp type-form)           (or (primitive-tag (car type-form))
+                                       (case  (car type-form)
+                                         ((:choice)      (mapcar (lambda (alternative) (tag (cadr alternative)))
+                                                                 (cadr type-form)))
+                                         ((:tagged-type) (destructuring-bind ((class tag) real-type &key &allow-other-keys) (cdr type-form)
+                                                           tag)))
                                        (error "Unexpected type ~S" type-form)))
       (t                           (error "Invalid type form ~S" type-form)))))
 
