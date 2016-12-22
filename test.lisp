@@ -58,8 +58,7 @@
 
 ;;
 
-(loop :for (pname asn) :in '(("BsxContextual"
-                              "
+(loop :for (pname asn) :in '(("BsxContextual" "
 BsxContextual { bsx(31337) }
 DEFINITIONS ::= BEGIN
 BsxPDU ::= SEQUENCE {
@@ -70,16 +69,19 @@ BsxCons ::= SEQUENCE {
     head BsxObject,
     tail BsxObject
 }
+BsxPrimitive ::= CHOICE {
+    pInteger INTEGER,
+    pBits    BIT STRING,
+    pBytes   OCTET STRING
+}
 BsxObject ::= CHOICE {
     null      [0] NULL,
-    primitive [1] OCTET STRING,
+    primitive [1] BsxPrimitive,
     cons      [2] BsxCons
 }
 END
 ")
-
-                             ("BsxImplicit"
-                              "
+                             ("BsxImplicit" "
 BsxImplicit { bsx(31337) }
 DEFINITIONS ::= BEGIN
 BsxPDU ::= SEQUENCE {
@@ -90,9 +92,14 @@ BsxCons ::= SEQUENCE {
     head BsxObject,
     tail BsxObject
 }
+BsxPrimitive ::= CHOICE {
+    pInteger INTEGER,
+    pBits    BIT STRING,
+    pBytes   OCTET STRING
+}
 BsxObject ::= CHOICE {
     null       NULL,
-    primitive  OCTET STRING,
+    primitive  BsxPrimitive,
     cons       BsxCons
 }
 END
@@ -110,8 +117,7 @@ END
 (import '(asinine.test:*debug* asinine.test:testing asinine.test:expect-error asinine.test:check))
 ;; (setf *debug* t)
 (defparameter *pdu-octets*
-  #(#x30 #x1D #x02 #x01  #x01 #xA2 #x18 #x30  #x16 #xA1 #x05 #x04  #x03 #x01 #x02 #x03
-    #xA2 #x0D #x30 #x0B  #xA1 #x05 #x04 #x03  #x04 #x05 #x06 #xA0  #x02 #x05 #x00))
+  #(48 43 2 1 1 162 38 48 36 161 3 2 1 42 162 29 48 27 161 7 3 5 0 76 158 96 0 162 16 48 14 161 8 4 6 4 2 42 10 10 10 160 2 5 0))
 (load #.(merge-pathnames "test-choice.lisp" (or *compile-file-truename* *load-truename*)))
 (load #.(merge-pathnames "test-encdec.lisp" (or *compile-file-truename* *load-truename*)))
 
@@ -119,10 +125,6 @@ END
 (import '(asinine.test:*debug* asinine.test:testing asinine.test:expect-error asinine.test:check))
 ;; (setf *debug* t)
 (defparameter *pdu-octets*
-  #(#x30 #x13 #x02 #x01 #x01
-    #x30 #x0E #x04 #x03 #x01 #x02 #x03
-    #x30 #x07 #x04 #x03 #x04 #x05 #x06
-    #x05 #x00))
+  #(48 29 2 1 1 48 24 2 1 42 48 19 3 5 0 76 158 96 0 48 10 4 6 4 2 42 10 10 10 5 0))
 (load #.(merge-pathnames "test-choice.lisp" (or *compile-file-truename* *load-truename*)))
 (load #.(merge-pathnames "test-encdec.lisp" (or *compile-file-truename* *load-truename*)))
-
