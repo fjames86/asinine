@@ -768,7 +768,6 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
 
 (defun generate-type-registrations (assignments vtype stream)
   (terpri stream)
-  (write-string "(eval-when (:compile-toplevel :load-toplevel :execute)" stream)
   (flet ((register-type (name type-form)
            (print `(setf (gethash ',name ,vtype) ',type-form) stream)))
     (dolist (assignment assignments)
@@ -785,7 +784,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                 (unless (symbolp type-form)
                   (error "assigment ~A sequence-of must be a symbol" name)))
               (register-type name type-form))))))))
-  (write-line ")" stream))
+)
 
 (defun gen (asn1 &optional (stream *standard-output*))
   (destructuring-bind (module-name assignments &key explicit implicit oid) (cdr asn1)
@@ -804,6 +803,8 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
               stream)
       (terpri stream)
 
+      (write-line "(eval-when (:compile-toplevel :load-toplevel :execute)" stream)
+
       ;; generate the types description used to decode untagged choices.
       (pprint `(defparameter *types* (make-hash-table))
               stream)
@@ -812,7 +813,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
               stream)
       (terpri stream)
       (generate-type-registrations assignments '*types* stream)
-      (terpri stream)
+      (write-line ")" stream)
 
       ;; generate each assignment
       (dolist (assignment assignments)
