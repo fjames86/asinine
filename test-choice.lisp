@@ -11,15 +11,15 @@
   (expect-error (funcall bad-accessor object)))
 
 (defun test-integer-car (current value)
-  (check (eql :bsx-primitive  (get-bsx-object-alternative (bsx-cons-head current))))
-  (check (equalp :integer (get-bsx-primitive-alternative (get-bsx-object-value (bsx-cons-head current)))))
+  (check (eql :primitive  (get-bsx-object-alternative (bsx-cons-head current))))
+  (check (equalp :p-integer (get-bsx-primitive-alternative (get-bsx-object-value (bsx-cons-head current)))))
   (check (equalp value (get-bsx-primitive-value (get-bsx-object-value (bsx-cons-head current)))))
   (check (equalp value (bsx-primitive-p-integer (bsx-object-primitive (bsx-cons-head current))))))
 
 (defun test-cons-cdr (current)
   (check (eql (get-bsx-object-value (bsx-cons-tail current))
               (bsx-object-cons      (bsx-cons-tail current))))
-  (check (eql :bsx-cons (get-bsx-object-alternative (bsx-cons-tail current)))))
+  (check (eql :cons (get-bsx-object-alternative (bsx-cons-tail current)))))
 
 (defun test-null-cdr (current)
   (check (eql (get-bsx-object-value (bsx-cons-tail current))
@@ -31,21 +31,21 @@
 
   ;; bsx-primitive
 
-  (test-choice-alternative (make-p-integer-bsx-primitive 42) 42 :integer
+  (test-choice-alternative (make-p-integer-bsx-primitive 42) 42 :p-integer
                            'bsx-primitive
                            'get-bsx-primitive-alternative
                            'get-bsx-primitive-value
                            'bsx-primitive-p-integer
                            'bsx-primitive-p-bits)
 
-  (test-choice-alternative (make-p-bytes-bsx-primitive #(1 2 3)) #(1 2 3) :octet-string
+  (test-choice-alternative (make-p-bytes-bsx-primitive #(1 2 3)) #(1 2 3) :p-bytes
                            'bsx-primitive
                            'get-bsx-primitive-alternative
                            'get-bsx-primitive-value
                            'bsx-primitive-p-bytes
                            'bsx-primitive-p-integer)
 
-  (test-choice-alternative (make-p-bits-bsx-primitive #*11100100) #*11100100 :bit-string
+  (test-choice-alternative (make-p-bits-bsx-primitive #*11100100) #*11100100 :p-bits
                            'bsx-primitive
                            'get-bsx-primitive-alternative
                            'get-bsx-primitive-value
@@ -63,7 +63,7 @@
                            'bsx-object-primitive)
 
   (let ((value (make-p-integer-bsx-primitive 42)))
-    (test-choice-alternative (make-primitive-bsx-object value) value :bsx-primitive
+    (test-choice-alternative (make-primitive-bsx-object value) value :primitive
                              'bsx-object
                              'get-bsx-object-alternative
                              'get-bsx-object-value
@@ -72,7 +72,7 @@
 
   (let ((value (make-bsx-cons :head (make-primitive-bsx-object (make-p-integer-bsx-primitive 42))
                               :tail (make-null-bsx-object 0))))
-    (test-choice-alternative (make-cons-bsx-object value) value :bsx-cons
+    (test-choice-alternative (make-cons-bsx-object value) value :cons
                              'bsx-object
                              'get-bsx-object-alternative
                              'get-bsx-object-value
@@ -89,7 +89,7 @@
                                                            (make-bsx-cons :head (make-primitive-bsx-object (make-p-integer-bsx-primitive 3))
                                                                           :tail (make-null-bsx-object 0)))))))))
     (print (get-bsx-object-alternative list))
-    (check (eql :bsx-cons (get-bsx-object-alternative list)))
+    (check (eql :cons (get-bsx-object-alternative list)))
     (let ((current (bsx-object-cons list)))
       (check (eql (get-bsx-object-value list) current))
       (test-integer-car current 1)
