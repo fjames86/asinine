@@ -243,6 +243,21 @@
 
 ;; -------------------------
 
+(defun encode-utf8string (stream string)
+  (encode-identifier stream 12)
+  (let ((octets (babel:string-to-octets string)))
+    (encode-length stream (length octets))
+    (write-sequence octets stream)))
+
+(defun decode-utf8string (stream)
+  (decode-identifier stream)
+  (let ((length (decode-length stream)))
+    (let ((octets (nibbles:make-octet-vector length)))
+      (read-sequence octets stream)
+      (babel:octets-to-string octets))))
+
+;; -------------------------
+
 (defun time-string (time)
   (multiple-value-bind (sec min hour day month year) (decode-universal-time time 0)
     (format nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D"
