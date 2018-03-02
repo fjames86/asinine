@@ -620,7 +620,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
     `(progn
        (defstruct (,name (:constructor ,%constructor (%alternative %value))) %alternative %value)
        ,@(mapcan (lambda (alternative)
-                   (let ((alternative-keyword (alexandria:make-keyword (type-name (cadr alternative))))
+                   (let ((alternative-keyword (alexandria:make-keyword (car alternative)))
                          (reader              (accessor-name name (car alternative))))
                      `(
                        ;; public constructor for alternative: (make-object-integer 42)
@@ -653,7 +653,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                     (case (,(accessor-name name '%alternative) choice)
                       ,@(mapcar (lambda (alternative)
                                   (destructuring-bind (s-name s-type &key tag) alternative
-                                    `((,(alexandria:make-keyword (type-name s-type)))
+                                    `((,(alexandria:make-keyword (type-name s-name)))
                                       (flet ((enc (stream v)
                                                ,@(cond
                                                    ((symbolp s-type)
