@@ -25,6 +25,8 @@
            #:decode-null
            #:encode-general-string
            #:decode-general-string
+	   #:encode-utf8string
+	   #:decode-utf8string
            #:encode-generalized-time
            #:decode-generalized-time
            #:encode-oid

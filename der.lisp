@@ -243,6 +243,21 @@
 
 ;; -------------------------
 
+(defun encode-utf8string (stream string)
+  (encode-identifier stream 12)
+  (let ((octets (babel:string-to-octets string)))
+    (encode-length stream (length octets))
+    (write-sequence octets stream)))
+
+(defun decode-utf8string (stream)
+  (decode-identifier stream)
+  (let ((length (decode-length stream)))
+    (let ((octets (nibbles:make-octet-vector length)))
+      (read-sequence octets stream)
+      (babel:octets-to-string octets))))
+
+;; -------------------------
+
 (defun time-string (time)
   (multiple-value-bind (sec min hour day month year) (decode-universal-time time 0)
     (format nil "~4,'0D~2,'0D~2,'0D~2,'0D~2,'0D~2,'0D"
@@ -605,7 +620,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
     `(progn
        (defstruct (,name (:constructor ,%constructor (%alternative %value))) %alternative %value)
        ,@(mapcan (lambda (alternative)
-                   (let ((alternative-keyword (alexandria:make-keyword (type-name (cadr alternative))))
+                   (let ((alternative-keyword (alexandria:make-keyword (car alternative)))
                          (reader              (accessor-name name (car alternative))))
                      `(
                        ;; public constructor for alternative: (make-object-integer 42)
@@ -638,7 +653,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                     (case (,(accessor-name name '%alternative) choice)
                       ,@(mapcar (lambda (alternative)
                                   (destructuring-bind (s-name s-type &key tag) alternative
-                                    `((,(alexandria:make-keyword (type-name s-type)))
+                                    `((,(alexandria:make-keyword (type-name s-name)))
                                       (flet ((enc (stream v)
                                                ,@(cond
                                                    ((symbolp s-type)
@@ -753,7 +768,6 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
 
 (defun generate-type-registrations (assignments vtype stream)
   (terpri stream)
-  (write-string "(eval-when (:compile-toplevel :load-toplevel :execute)" stream)
   (flet ((register-type (name type-form)
            (print `(setf (gethash ',name ,vtype) ',type-form) stream)))
     (dolist (assignment assignments)
@@ -770,7 +784,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
                 (unless (symbolp type-form)
                   (error "assigment ~A sequence-of must be a symbol" name)))
               (register-type name type-form))))))))
-  (write-line ")" stream))
+)
 
 (defun gen (asn1 &optional (stream *standard-output*))
   (destructuring-bind (module-name assignments &key explicit implicit oid) (cdr asn1)
@@ -789,6 +803,8 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
               stream)
       (terpri stream)
 
+      (write-line "(eval-when (:compile-toplevel :load-toplevel :execute)" stream)
+
       ;; generate the types description used to decode untagged choices.
       (pprint `(defparameter *types* (make-hash-table))
               stream)
@@ -797,7 +813,7 @@ Either we have tags, and they must be unique, or we don't have tags, and the typ
               stream)
       (terpri stream)
       (generate-type-registrations assignments '*types* stream)
-      (terpri stream)
+      (write-line ")" stream)
 
       ;; generate each assignment
       (dolist (assignment assignments)

@@ -7,5 +7,6 @@
   :description "Tests the ASN.1 parser and code generator."
   :license "MIT"
   :serial t
-  :components ((:file "test"))
+  :components ((:file "prepare-test")
+	       (:file "test-run"))
   :depends-on (:asinine :asinine-parser))
